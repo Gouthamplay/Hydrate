@@ -127,27 +127,37 @@ async function scheduler(env){
   const {results=[]}=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,p.start_minute,p.end_minute
     FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id WHERE p.enabled=1`).all();
   for(const s of results){
-    if(minute<s.start_minute||minute>s.end_minute)continue;
-    const hourly=(minute-s.start_minute)%60===0;
-    const plan=await dailyPlan(env.DB,s.id,dateKey,s.start_minute,s.end_minute);
-    const surprise=plan.includes(minute);
-    if(!hourly&&!surprise)continue;
-    const scheduledAt=dateKey+"T"+String(Math.floor(minute/60)).padStart(2,"0")+":"+String(minute%60).padStart(2,"0");
-    const ins=await env.DB.prepare("INSERT OR IGNORE INTO sent_notifications(id,subscription_id,scheduled_at,reminder_type) VALUES(?,?,?,?)")
-      .bind(crypto.randomUUID(),s.id,scheduledAt,hourly?"hourly":"surprise").run();
-    if(!ins.meta?.changes)continue;
-    const pool=Math.random()<0.8?hydration:motivation;
-    try{
-      const result=await push(s,{title:"Hydrate",body:pool[randomInt(pool.length)],url:"https://gouthamplay.github.io/Hydrate/",tag:"hydrate-"+dateKey+"-"+minute,dateKey,slotMinutes:s.start_minute+Math.floor((minute-s.start_minute)/60)*60},env);
-      if(result.status===404||result.status===410){
-        await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
-      }else if(!result.ok){
+    // Process the current minute and up to four preceding minutes so a delayed
+    // Cron invocation does not silently miss a scheduled reminder.
+    const due=[];
+    for(let m=Math.max(0,minute-4);m<=minute;m++){
+      if(m<s.start_minute||m>s.end_minute)continue;
+      const hourly=(m-s.start_minute)%60===0;
+      const plan=await dailyPlan(env.DB,s.id,dateKey,s.start_minute,s.end_minute);
+      const surprise=plan.includes(m);
+      if(hourly||surprise)due.push({minute:m,type:hourly?"hourly":"surprise"});
+    }
+    for(const item of due){
+      const m=item.minute;
+      const scheduledAt=dateKey+"T"+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+      const ins=await env.DB.prepare("INSERT OR IGNORE INTO sent_notifications(id,subscription_id,scheduled_at,reminder_type) VALUES(?,?,?,?)")
+        .bind(crypto.randomUUID(),s.id,scheduledAt,item.type).run();
+      if(!ins.meta?.changes)continue;
+      const pool=Math.random()<0.8?hydration:motivation;
+      try{
+        const result=await push(s,{title:"Hydrate",body:pool[randomInt(pool.length)],url:"https://gouthamplay.github.io/Hydrate/",tag:"hydrate-"+dateKey+"-"+m,dateKey,slotMinutes:s.start_minute+Math.floor((m-s.start_minute)/60)*60,reminderType:item.type},env);
+        if(result.status===404||result.status===410){
+          await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
+        }else if(!result.ok){
+          await env.DB.prepare("DELETE FROM sent_notifications WHERE subscription_id=? AND scheduled_at=?").bind(s.id,scheduledAt).run();
+          console.error("Hydrate push rejected",JSON.stringify({status:result.status,body:(await result.text()).slice(0,500),type:item.type,scheduledAt}));
+        }else{
+          console.log("Hydrate push accepted",JSON.stringify({status:result.status,type:item.type,scheduledAt}));
+        }
+      }catch(e){
         await env.DB.prepare("DELETE FROM sent_notifications WHERE subscription_id=? AND scheduled_at=?").bind(s.id,scheduledAt).run();
-        console.error("Push service rejected request",result.status,await result.text());
+        console.error("Hydrate push exception",JSON.stringify({message:e?.message||String(e),type:item.type,scheduledAt}));
       }
-    }catch(e){
-      await env.DB.prepare("DELETE FROM sent_notifications WHERE subscription_id=? AND scheduled_at=?").bind(s.id,scheduledAt).run();
-      console.error("Push delivery error",e);
     }
   }
 }
@@ -156,6 +166,14 @@ export default {
     if(request.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
     const path=new URL(request.url).pathname;
     try{
+      if(request.method==="GET"&&path==="/status"){
+        const now=localNow();
+        const {results=[]}=await env.DB.prepare(`SELECT p.start_minute,p.end_minute,p.enabled,
+          (SELECT COUNT(*) FROM sent_notifications n WHERE n.subscription_id=s.id) AS sent_count,
+          (SELECT MAX(sent_at) FROM sent_notifications n WHERE n.subscription_id=s.id) AS last_attempt
+          FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id`).all();
+        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,subscriptions:results});
+      }
       if(request.method==="GET"&&path==="/health"){
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
         return json({ok:true,service:"Hydrate API",database:"connected",subscriptions:r.count});
