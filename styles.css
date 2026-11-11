@@ -82,3 +82,5 @@ body{background:radial-gradient(ellipse at 90% 0%,#d8f2ff 0%,transparent 42%),li
 .danger-card h2{margin:5px 0 9px}
 .clear-logs{width:100%;margin-top:17px;border:1px solid #edc8c2;background:#fff5f3;color:#a8443a;padding:14px}
 .settings-privacy{text-align:center;color:#8aa0ae;font-size:10px;padding:10px 0}
+
+.quick-history{margin-top:13px;padding-top:12px;border-top:1px solid #cce8f5}.quick-title{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#6e91a4;font-weight:750;margin:0 0 8px}.quick-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:11px;color:#55758a}.quick-row b{font-size:10px;color:#087eb8}
