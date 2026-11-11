@@ -3,7 +3,7 @@
 Local-first hydration accountability PWA.
 
 ## Included
-- Yes/No check-ins; no volume tracking
+- Scheduled Yes/No check-ins and exact-time quick check-ins; no volume tracking
 - Configurable daily start/end times with hourly slots
 - Monthly calendar and Yes-rate summary
 - Local browser storage and JSON export/import backup
