@@ -161,54 +161,76 @@ async function ensureDiagnostics(DB){
     last_error TEXT
   )`).run();
   await DB.prepare("INSERT OR IGNORE INTO scheduler_heartbeat(id,runs) VALUES(1,0)").run();
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS delivery_locks (
+    subscription_id TEXT NOT NULL,
+    bucket_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(subscription_id,bucket_key)
+  )`).run();
 }
 async function scheduler(env, controller){
   await ensureDiagnostics(env.DB);
   const {dateKey,minute}=localNow();
+  const nowIso=new Date().toISOString();
   await env.DB.prepare("UPDATE scheduler_heartbeat SET last_run=?,last_cron=?,runs=runs+1,last_error=NULL WHERE id=1")
-    .bind(new Date().toISOString(),controller?.cron||"unknown").run();
+    .bind(nowIso,controller?.cron||"unknown").run();
+
   const {results=[]}=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,p.start_minute,p.end_minute
     FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id WHERE p.enabled=1`).all();
-  const debug={dateKey,minute,subscriptionCount:results.length,subscriptions:[]};
-  await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
+
+  const debug={dateKey,minute,subscriptionCount:results.length,intervalMinutes:5,subscriptions:[]};
   for(const s of results){
-    // TEMPORARY DELIVERY TEST: send every five minutes during the saved
-    // reminder window. Restore this to 60 after the user confirms delivery.
-    // Process the current minute and up to ten preceding minutes so a delayed
-    // Cron invocation does not silently lose a reminder.
-    const TEST_INTERVAL_MINUTES=5;
-    const due=[];
-    for(let m=Math.max(0,minute-10);m<=minute;m++){
-      if(m<s.start_minute||m>s.end_minute)continue;
-      if((m-s.start_minute)%TEST_INTERVAL_MINUTES===0){
-        due.push({minute:m,type:"test-5-minute"});
-      }
-    }
-    debug.subscriptions.push({start:s.start_minute,end:s.end_minute,due:due.map(x=>({minute:x.minute,type:x.type}))});
-    await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
-    for(const item of due){
-      const m=item.minute;
-      const scheduledAt=dateKey+"T"+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
-      const ins=await env.DB.prepare("INSERT OR IGNORE INTO sent_notifications(id,subscription_id,scheduled_at,reminder_type) VALUES(?,?,?,?)")
-        .bind(crypto.randomUUID(),s.id,scheduledAt,item.type).run();
-      if(!ins.meta?.changes)continue;
-      const pool=Math.random()<0.8?hydration:motivation;
-      try{
-        const result=await push(s,{title:"Hydrate",body:pool[randomInt(pool.length)],url:"https://gouthamplay.github.io/Hydrate/",tag:"hydrate-"+dateKey+"-"+m,dateKey,slotMinutes:s.start_minute+Math.floor((m-s.start_minute)/60)*60,reminderType:item.type},env);
-        if(result.status===404||result.status===410){
-          await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
-        }else if(!result.ok){
-          await env.DB.prepare("DELETE FROM sent_notifications WHERE subscription_id=? AND scheduled_at=?").bind(s.id,scheduledAt).run();
-          console.error("Hydrate push rejected",JSON.stringify({status:result.status,body:(await result.text()).slice(0,500),type:item.type,scheduledAt}));
-        }else{
-          console.log("Hydrate push accepted",JSON.stringify({status:result.status,type:item.type,scheduledAt}));
+    const active=minute>=s.start_minute && minute<=s.end_minute;
+    const bucketMinute=Math.floor(minute/5)*5;
+    const bucketKey=dateKey+"T"+String(Math.floor(bucketMinute/60)).padStart(2,"0")+":"+String(bucketMinute%60).padStart(2,"0");
+    const entry={start:s.start_minute,end:s.end_minute,active,bucketKey,status:active?"waiting":"outside-window"};
+    if(active){
+      // A dedicated primary-key lock guarantees one delivery per device per
+      // five-minute bucket, regardless of overlapping Cron invocations.
+      const lock=await env.DB.prepare("INSERT OR IGNORE INTO delivery_locks(subscription_id,bucket_key) VALUES(?,?)")
+        .bind(s.id,bucketKey).run();
+      if(lock.meta?.changes){
+        entry.status="sending";
+        try{
+          const pool=Math.random()<0.8?hydration:motivation;
+          const result=await push(s,{
+            title:"Hydrate",
+            body:pool[randomInt(pool.length)],
+            url:"https://gouthamplay.github.io/Hydrate/",
+            tag:"hydrate-"+dateKey+"-"+bucketMinute,
+            dateKey,
+            slotMinutes:s.start_minute+Math.floor((bucketMinute-s.start_minute)/60)*60,
+            reminderType:"test-5-minute"
+          },env);
+          if(result.status===404||result.status===410){
+            await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
+            entry.status="expired-subscription";
+          }else if(!result.ok){
+            const detail=(await result.text()).slice(0,400);
+            await env.DB.prepare("DELETE FROM delivery_locks WHERE subscription_id=? AND bucket_key=?").bind(s.id,bucketKey).run();
+            entry.status="push-rejected";
+            entry.pushStatus=result.status;
+            entry.detail=detail;
+            console.error("Hydrate scheduled push rejected",JSON.stringify({status:result.status,detail,bucketKey}));
+          }else{
+            entry.status="accepted";
+            entry.pushStatus=result.status;
+            console.log("Hydrate scheduled push accepted",JSON.stringify({status:result.status,bucketKey}));
+          }
+        }catch(error){
+          await env.DB.prepare("DELETE FROM delivery_locks WHERE subscription_id=? AND bucket_key=?").bind(s.id,bucketKey).run();
+          entry.status="exception";
+          entry.error=error?.message||String(error);
+          console.error("Hydrate scheduled push exception",JSON.stringify({error:entry.error,bucketKey}));
         }
-      }catch(e){
-        await env.DB.prepare("DELETE FROM sent_notifications WHERE subscription_id=? AND scheduled_at=?").bind(s.id,scheduledAt).run();
-        console.error("Hydrate push exception",JSON.stringify({message:e?.message||String(e),type:item.type,scheduledAt}));
+      }else{
+        entry.status="already-processed";
       }
     }
+    debug.subscriptions.push(entry);
   }
+  await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1")
+    .bind(JSON.stringify(debug),new Date().toISOString()).run();
 }
 export default {
   async fetch(request,env){
