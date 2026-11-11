@@ -123,6 +123,8 @@ async function preferences(request,env){
   return json({ok:true});
 }
 async function ensureDiagnostics(DB){
+  await DB.prepare("CREATE TABLE IF NOT EXISTS scheduler_debug (id INTEGER PRIMARY KEY CHECK (id=1), details TEXT, updated_at TEXT)").run();
+  await DB.prepare("INSERT OR IGNORE INTO scheduler_debug(id,details) VALUES(1,'{}')").run();
   await DB.prepare(`CREATE TABLE IF NOT EXISTS scheduler_heartbeat (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     last_run TEXT,
@@ -139,6 +141,8 @@ async function scheduler(env, controller){
     .bind(new Date().toISOString(),controller?.cron||"unknown").run();
   const {results=[]}=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,p.start_minute,p.end_minute
     FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id WHERE p.enabled=1`).all();
+  const debug={dateKey,minute,subscriptionCount:results.length,subscriptions:[]};
+  await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
   for(const s of results){
     // Process the current minute and up to four preceding minutes so a delayed
     // Cron invocation does not silently miss a scheduled reminder.
@@ -150,6 +154,8 @@ async function scheduler(env, controller){
       const surprise=plan.includes(m);
       if(hourly||surprise)due.push({minute:m,type:hourly?"hourly":"surprise"});
     }
+    debug.subscriptions.push({start:s.start_minute,end:s.end_minute,due:due.map(x=>({minute:x.minute,type:x.type}))});
+    await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
     for(const item of due){
       const m=item.minute;
       const scheduledAt=dateKey+"T"+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
@@ -187,7 +193,8 @@ export default {
           (SELECT MAX(sent_at) FROM sent_notifications n WHERE n.subscription_id=s.id) AS last_attempt
           FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id`).all();
         const heartbeat=await env.DB.prepare("SELECT last_run,last_cron,runs,last_error FROM scheduler_heartbeat WHERE id=1").first();
-        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,heartbeat,subscriptions:results});
+        const schedulerDebug=await env.DB.prepare("SELECT details,updated_at FROM scheduler_debug WHERE id=1").first();
+        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,heartbeat,schedulerDebug,subscriptions:results});
       }
       if(request.method==="GET"&&path==="/health"){
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
