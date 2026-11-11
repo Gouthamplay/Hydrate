@@ -8,7 +8,7 @@ function closeMenu(){$("appMenu").classList.remove("visible");$("menuBackdrop").
 function openMenu(){$("appMenu").classList.add("visible");$("menuBackdrop").classList.add("visible");$("appMenu").setAttribute("aria-hidden","false");$("menuTrigger").setAttribute("aria-expanded","true")}
 $("menuTrigger").onclick=openMenu;$("menuClose").onclick=closeMenu;$("menuBackdrop").onclick=closeMenu;
 $("menuSettings").onclick=()=>{closeMenu();$("settings")?.scrollIntoView({behavior:"smooth",block:"start"})};
-$("menuTest").onclick=()=>{closeMenu();$("notify").click()};
+
 $("menuClear").onclick=()=>{if(!window.confirm("Delete all Hydrate check-in logs on this device? This cannot be undone. Export a backup first if you want to keep them."))return;state.logs={};persist();render();closeMenu();toast("All check-in logs cleared.")};
 function readProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")}catch{return {}}}
 $("menuProfile").onclick=()=>{closeMenu();$("profileName").value=readProfile().name||"";$("profileOverlay").classList.add("visible");$("profileOverlay").setAttribute("aria-hidden","false")};
