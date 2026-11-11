@@ -15,3 +15,7 @@ The Cloudflare Worker is currently a Hello World placeholder. This repository do
 Check-in history stays in browser localStorage and is not sent to the backend by this version. Export backups regularly. Clearing Safari website data or removing the installed web app can erase local history.
 
 GitHub Pages project-site paths are relative so the app can run at /Hydrate/.
+
+
+## Cloudflare deployment
+The `worker.js` entry point and `wrangler.jsonc` configuration are deployed through Cloudflare Workers Builds. Push notifications require the Cloudflare D1 binding and VAPID runtime variables configured on the Worker.
