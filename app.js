@@ -12,7 +12,7 @@ function showPage(name){$("homePage").hidden=name!=="home";$("settingsPage").hid
 $("menuSettings").onclick=()=>{closeMenu();showPage("settings")};
 $("settingsBack").onclick=()=>showPage("home");
 
-$("clearLogs").onclick=()=>{if(!window.confirm("Delete all Hydrate check-in logs on this device? This cannot be undone. Export a backup first if you want to keep them."))return;state.logs={};persist();render();toast("All check-in logs cleared.")};
+$("clearLogs").onclick=()=>{if(!window.confirm("Delete all Hydrate check-in logs on this device? This cannot be undone. Export a backup first if you want to keep them."))return;state.logs={};state.quickChecks=[];persist();render();toast("All check-in logs cleared.")};
 function readProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")}catch{return {}}}
 $("menuProfile").onclick=()=>{closeMenu();$("profileName").value=readProfile().name||"";$("profileOverlay").classList.add("visible");$("profileOverlay").setAttribute("aria-hidden","false")};
 function closeProfile(){$("profileOverlay").classList.remove("visible");$("profileOverlay").setAttribute("aria-hidden","true")}
