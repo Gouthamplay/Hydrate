@@ -7,9 +7,9 @@ function renderMonth(){let d=new Date(),y=d.getFullYear(),mo=d.getMonth(),count=
 function closeMenu(){$("appMenu").classList.remove("visible");$("menuBackdrop").classList.remove("visible");$("appMenu").setAttribute("aria-hidden","true");$("menuTrigger").setAttribute("aria-expanded","false")}
 function openMenu(){$("appMenu").classList.add("visible");$("menuBackdrop").classList.add("visible");$("appMenu").setAttribute("aria-hidden","false");$("menuTrigger").setAttribute("aria-expanded","true")}
 $("menuTrigger").onclick=openMenu;$("menuClose").onclick=closeMenu;$("menuBackdrop").onclick=closeMenu;
-$("menuSettings").onclick=()=>{closeMenu();$("settings")?.scrollIntoView({behavior:"smooth",block:"start"})};
+function showPage(name){$("homePage").hidden=name!=="home";$("settingsPage").hidden=name!=="settings";window.scrollTo({top:0,behavior:"instant"})}\n$("menuSettings").onclick=()=>{closeMenu();showPage("settings")};\n$("settingsBack").onclick=()=>showPage("home");
 
-$("menuClear").onclick=()=>{if(!window.confirm("Delete all Hydrate check-in logs on this device? This cannot be undone. Export a backup first if you want to keep them."))return;state.logs={};persist();render();closeMenu();toast("All check-in logs cleared.")};
+$("clearLogs").onclick=()=>{if(!window.confirm("Delete all Hydrate check-in logs on this device? This cannot be undone. Export a backup first if you want to keep them."))return;state.logs={};persist();render();toast("All check-in logs cleared.")};
 function readProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")}catch{return {}}}
 $("menuProfile").onclick=()=>{closeMenu();$("profileName").value=readProfile().name||"";$("profileOverlay").classList.add("visible");$("profileOverlay").setAttribute("aria-hidden","false")};
 function closeProfile(){$("profileOverlay").classList.remove("visible");$("profileOverlay").setAttribute("aria-hidden","true")}
