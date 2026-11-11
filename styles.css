@@ -7,3 +7,5 @@
 .checkin-actions button{min-height:48px}
 .dismiss-prompt{display:block;width:100%;border:0;background:transparent;color:var(--muted);font-weight:550;padding:10px}
 @keyframes popin{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+.slot small{display:block;margin-top:4px;font-size:11px;line-height:1.2;color:var(--muted);font-weight:600}
