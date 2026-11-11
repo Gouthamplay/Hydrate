@@ -172,16 +172,17 @@ async function scheduler(env, controller){
   const debug={dateKey,minute,subscriptionCount:results.length,subscriptions:[]};
   await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
   for(const s of results){
-    // Process the current minute and up to ten preceding minutes.
-    // Cloudflare Cron can be delayed; this bounded grace period prevents
-    // hourly reminders being lost while avoiding very stale notifications.
+    // TEMPORARY DELIVERY TEST: send every five minutes during the saved
+    // reminder window. Restore this to 60 after the user confirms delivery.
+    // Process the current minute and up to ten preceding minutes so a delayed
+    // Cron invocation does not silently lose a reminder.
+    const TEST_INTERVAL_MINUTES=5;
     const due=[];
     for(let m=Math.max(0,minute-10);m<=minute;m++){
       if(m<s.start_minute||m>s.end_minute)continue;
-      const hourly=(m-s.start_minute)%60===0;
-      const plan=await dailyPlan(env.DB,s.id,dateKey,s.start_minute,s.end_minute);
-      const surprise=plan.includes(m);
-      if(hourly||surprise)due.push({minute:m,type:hourly?"hourly":"surprise"});
+      if((m-s.start_minute)%TEST_INTERVAL_MINUTES===0){
+        due.push({minute:m,type:"test-5-minute"});
+      }
     }
     debug.subscriptions.push({start:s.start_minute,end:s.end_minute,due:due.map(x=>({minute:x.minute,type:x.type}))});
     await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
