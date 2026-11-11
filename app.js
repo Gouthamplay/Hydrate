@@ -38,3 +38,14 @@ $("menuProfile").onclick=()=>{closeMenu();$("profileName").value=readProfile().n
 function closeProfile(){$("profileOverlay").classList.remove("visible");$("profileOverlay").setAttribute("aria-hidden","true")}
 $("profileClose").onclick=closeProfile;$("profileSave").onclick=()=>{localStorage.setItem(PROFILE_KEY,JSON.stringify({name:$("profileName").value.trim()}));closeProfile();toast("Profile saved on this device.")};
 if("serviceWorker"in navigator){document.addEventListener("visibilitychange",()=>{if(!document.hidden)renderHero()});window.addEventListener("focus",renderHero);setInterval(renderHero,60000);navigator.serviceWorker.addEventListener("message",e=>{if(e.data&&e.data.type==="HYDRATE_OPEN_CHECKIN")showCheckinPrompt()});navigator.serviceWorker.register("./sw.js").catch(()=>{})}render();renderHero();const launchParams=new URLSearchParams(location.search);if(launchParams.get("checkin")==="1"){showCheckinPrompt();history.replaceState(null,"",location.pathname)}
+$("remoteTest").onclick=async()=>{
+  const raw=localStorage.getItem(PUSH_SUB_KEY);
+  if(!raw){toast("Connect notifications first using Test notification.");return}
+  try{
+    const sub=JSON.parse(raw);
+    const res=await fetch(HYDRATE_API+"/test-push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:sub.endpoint})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.error||"Remote test failed");
+    toast("Remote push accepted. Check your iPhone notifications.");
+  }catch(e){toast(e.message||"Could not send remote test.");console.error(e)}
+};
