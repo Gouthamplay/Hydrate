@@ -69,7 +69,7 @@ async function vapid(endpoint,env){
   const jwk={kty:"EC",crv:"P-256",x:b64u(pub.slice(1,33)),y:b64u(pub.slice(33,65)),d:env.VAPID_PRIVATE_KEY,ext:true};
   const key=await crypto.subtle.importKey("jwk",jwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
   const h=b64u(bytes(JSON.stringify({typ:"JWT",alg:"ES256"})));
-  const p=b64u(bytes(JSON.stringify({aud:u.origin,exp:now+43200,sub:env.VAPID_SUBJECT})));
+  const p=b64u(bytes(JSON.stringify({aud:u.origin,exp:now+43200,sub:"https://gouthamplay.github.io/Hydrate/"})));
   const input=h+"."+p;
   const sig=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},key,bytes(input));
   return input+"."+b64u(sig);
