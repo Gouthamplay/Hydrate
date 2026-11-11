@@ -1,1 +1,18 @@
-{"name":"Hydrate","short_name":"Hydrate","description":"A simple hydration accountability tracker","start_url":"./","scope":"./","display":"standalone","background_color":"#edf8ff","theme_color":"#eaf6ff","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "Hydrate",
+  "short_name": "Hydrate",
+  "description": "A simple hydration accountability tracker",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#edf8ff",
+  "theme_color": "#eaf6ff",
+  "icons": [
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
