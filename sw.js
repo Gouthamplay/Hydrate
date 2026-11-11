@@ -1,9 +1,9 @@
-const CACHE="hydrate-shell-v15";
+const CACHE="hydrate-shell-v16";
 const HYDRATION_MESSAGES=["A little sip can make a nice difference.","Your water break is waiting. 💧","Pause what you're doing. Time to hydrate.","Give yourself a quick refresh.","Your bottle called. It misses you.","A quick sip before the next big thing.","Take a moment. Refill yourself.","Water break? Sounds like a good idea.","A little water, then back to it.","Keep your day flowing. 💧"];
 const MOTIVATION_MESSAGES=["Small habits. Big changes.","Progress is built one little action at a time.","Make time for yourself, too.","Keep showing up for yourself.","You deserve the same care you give everything else.","Great things start with small habits.","Consistency beats perfection.","Be proud of the little things you do for yourself."];
 function reminderBody(){return Math.random()<0.7?HYDRATION_MESSAGES[Math.floor(Math.random()*HYDRATION_MESSAGES.length)]:MOTIVATION_MESSAGES[Math.floor(Math.random()*MOTIVATION_MESSAGES.length)]}
 
-const FILES=["./","./index.html","./styles.css","./app.js","./manifest.json","./icon.svg"];
+const FILES=["./","./index.html","./styles.css","./app.js","./manifest.json","./icon.svg","./apple-touch-icon.png"];
 self.addEventListener("install",e=>e.waitUntil((async()=>{const c=await caches.open(CACHE);await c.addAll(FILES);await self.skipWaiting()})()));
 self.addEventListener("activate",e=>e.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(x=>x.startsWith("hydrate-shell-")&&x!==CACHE).map(x=>caches.delete(x)));await self.clients.claim()})()));
 self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;const u=new URL(e.request.url);const refresh=["/","/index.html","/styles.css","/app.js","/sw.js"].some(p=>u.pathname.endsWith(p));if(refresh){e.respondWith((async()=>{const cache=await caches.open(CACHE);try{const response=await fetch(e.request,{cache:"no-store"});if(response.ok)await cache.put(e.request,response.clone());return response}catch{return (await cache.match(e.request))||Response.error()}})());return}e.respondWith(caches.match(e.request).then(x=>x||fetch(e.request).then(r=>{if(r.ok){const c=r.clone();caches.open(CACHE).then(k=>k.put(e.request,c))}return r}).catch(()=>caches.match("./index.html"))))});
