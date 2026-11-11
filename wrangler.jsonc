@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hydrate-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-11",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hydrate-db",
+      "database_id": "6c9dab97-17a7-4b95-b569-e611ecc36549"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}
