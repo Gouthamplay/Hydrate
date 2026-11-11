@@ -185,6 +185,14 @@ async function scheduler(env, controller){
     const bucketKey=dateKey+"T"+String(Math.floor(bucketMinute/60)).padStart(2,"0")+":"+String(bucketMinute%60).padStart(2,"0");
     const entry={start:s.start_minute,end:s.end_minute,active,bucketKey,status:active?"waiting":"outside-window"};
     if(active){
+      // Ignore malformed/old subscription rows rather than letting one bad
+      // device record abort the scheduled delivery loop.
+      if(!s.endpoint || !s.p256dh || !s.auth){
+        entry.status="invalid-subscription-data";
+        entry.missingFields=[...(!s.endpoint?["endpoint"]:[]),...(!s.p256dh?["p256dh"]:[]),...(!s.auth?["auth"]:[])];
+        debug.subscriptions.push(entry);
+        continue;
+      }
       // A dedicated primary-key lock guarantees one delivery per device per
       // five-minute bucket, regardless of overlapping Cron invocations.
       const lock=await env.DB.prepare("INSERT OR IGNORE INTO delivery_locks(subscription_id,bucket_key) VALUES(?,?)")
@@ -221,7 +229,8 @@ async function scheduler(env, controller){
           await env.DB.prepare("DELETE FROM delivery_locks WHERE subscription_id=? AND bucket_key=?").bind(s.id,bucketKey).run();
           entry.status="exception";
           entry.error=error?.message||String(error);
-          console.error("Hydrate scheduled push exception",JSON.stringify({error:entry.error,bucketKey}));
+          entry.stack=String(error?.stack||"").slice(0,700);
+          console.error("Hydrate scheduled push exception",JSON.stringify({error:entry.error,stack:entry.stack,bucketKey,hasEndpoint:!!s.endpoint,hasP256dh:!!s.p256dh,hasAuth:!!s.auth,hasVapidPublic:!!env.VAPID_PUBLIC_KEY,hasVapidPrivate:!!env.VAPID_PRIVATE_KEY}));
         }
       }else{
         entry.status="already-processed";
