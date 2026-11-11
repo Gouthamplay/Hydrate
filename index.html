@@ -1,15 +1,35 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f6f2"><meta name="description" content="A simple hydration accountability tracker."><title>Hydrate</title><link rel="manifest" href="./manifest.json"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css"></head>
 <body><main class="shell">
-<header class="nav"><a class="logo" href="./"><span class="drop">h</span>hydrate<span class="dot">.</span></a><span class="local">PRIVATE BY DESIGN</span></header>
+<header class="nav"><a class="logo" href="./"><span class="drop">h</span>hydrate<span class="dot">.</span></a><button class="menu-trigger" id="menuTrigger" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button></header>
 <section class="hero"><p class="kicker" id="today"></p><h1>Make hydration<br><i>a daily habit.</i></h1><p class="intro">A gentle nudge to pause, drink water, and keep going.</p></section>
 <section class="card score"><div class="scorehead"><div><p class="kicker">TODAY'S CHECK-INS</p><strong id="score">0 <small>/ 15</small></strong></div><div class="ring" id="ring"><span id="percent">0%</span></div></div><div class="track"><span id="bar"></span></div><p class="muted" id="scoreNote">A fresh start. Your next check-in is waiting.</p></section>
 <section class="card next"><div class="flex"><div><p class="kicker">NEXT CHECK-IN</p><h2 id="next">—</h2></div><span class="pulse"></span></div><p class="muted" id="windowText">Your reminder window: 7:00 AM – 9:00 PM</p><div class="buttons"><button class="yes" id="yes">Yes, I drank water</button><button class="no" id="no">Not this time</button></div><p class="tiny" id="feedback">Simple accountability. No volume tracking.</p></section>
 <section class="section"><div class="flex"><div><p class="kicker">TODAY</p><h2>Your check-ins</h2></div><span class="muted" id="answered">0 answered</span></div><div class="slots" id="slots"></div></section>
-<section class="card settings"><p class="kicker">YOUR ROUTINE</p><h2>Reminder window</h2><div class="field"><label for="start">Start</label><input id="start" type="time" value="07:00"></div><div class="field"><label for="end">End</label><input id="end" type="time" value="21:00"></div><div class="field"><label>Frequency</label><span class="fixed">Every 1 hour</span></div><button class="outline" id="save">Save settings</button><div class="divider"></div><div class="flex"><div><b>Push notifications</b><p class="muted tiny" id="pushState">Not configured yet</p></div><button class="small" id="notify">Test notification</button></div><p class="tiny muted">Use the test button to check notification permission and display. Scheduled reminders require the separate Web Push backend.</p></section>
+<section class="card settings"><p class="kicker">YOUR ROUTINE</p><h2>Reminder window</h2><div class="field"><label for="start">Start</label><input id="start" type="time" value="07:00"></div><div class="field"><label for="end">End</label><input id="end" type="time" value="21:00"></div><div class="field"><label>Frequency</label><span class="fixed">Every 1 hour</span></div><button class="outline" id="save">Save settings</button><div class="divider"></div><div class="flex"><div><b>Push notifications</b><p class="muted tiny" id="pushState">Not configured yet</p></div><span class="tiny muted">Manage from menu</span></div></section>
 <section class="card history"><div class="flex"><div><p class="kicker">YOUR PROGRESS</p><h2>This month</h2></div><span class="muted" id="month"></span></div><div class="monthrate"><strong id="rate">—</strong><span>of answered check-ins marked Yes</span></div><div class="calendar" id="calendar"></div><button class="outline" id="export">Export backup (.json)</button><label class="restore">Restore backup<input id="import" type="file" accept="application/json,.json"></label><p class="tiny muted">History stays in this browser on this device. Export backups regularly; clearing website data can erase it.</p></section>
 <footer><span>Consistency over perfection.</span><span>LOCAL DATA ONLY</span></footer>
-</main><section class="checkin-overlay" id="checkinOverlay" aria-hidden="true">
+</main>
+<div class="menu-backdrop" id="menuBackdrop"></div>
+<aside class="app-menu" id="appMenu" aria-hidden="true">
+  <div class="menu-head"><strong>Hydrate</strong><button id="menuClose" aria-label="Close menu">×</button></div>
+  <button class="menu-item" id="menuProfile"><span>Profile</span><small>Personal details</small></button>
+  <button class="menu-item" id="menuSettings"><span>Settings</span><small>Reminder schedule</small></button>
+  <div class="menu-divider"></div>
+  <button class="menu-item" id="menuTest"><span>Test notification</span><small>Send a sample reminder</small></button>
+  <button class="menu-item danger" id="menuClear"><span>Clear all logs</span><small>Erase check-in history on this device</small></button>
+  <p class="menu-foot">Your data stays on this device.</p>
+</aside>
+<section class="profile-overlay" id="profileOverlay" aria-hidden="true">
+  <div class="profile-dialog">
+    <div class="flex"><h2>Your profile</h2><button id="profileClose" class="profile-close" aria-label="Close profile">×</button></div>
+    <p class="muted">A local profile for your Hydrate app. No account or sign-in required.</p>
+    <label class="profile-label" for="profileName">Display name</label>
+    <input id="profileName" class="profile-input" type="text" maxlength="40" placeholder="Your name">
+    <button class="yes profile-save" id="profileSave">Save profile</button>
+  </div>
+</section>
+<section class="checkin-overlay" id="checkinOverlay" aria-hidden="true">
   <div class="checkin-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinTitle">
     <p class="kicker">HYDRATE CHECK-IN</p>
     <h2 id="checkinTitle">Did you drink water?</h2>
