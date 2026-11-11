@@ -144,10 +144,11 @@ async function scheduler(env, controller){
   const debug={dateKey,minute,subscriptionCount:results.length,subscriptions:[]};
   await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1").bind(JSON.stringify(debug),new Date().toISOString()).run();
   for(const s of results){
-    // Process the current minute and up to four preceding minutes so a delayed
-    // Cron invocation does not silently miss a scheduled reminder.
+    // Process the current minute and up to ten preceding minutes.
+    // Cloudflare Cron can be delayed; this bounded grace period prevents
+    // hourly reminders being lost while avoiding very stale notifications.
     const due=[];
-    for(let m=Math.max(0,minute-4);m<=minute;m++){
+    for(let m=Math.max(0,minute-10);m<=minute;m++){
       if(m<s.start_minute||m>s.end_minute)continue;
       const hourly=(m-s.start_minute)%60===0;
       const plan=await dailyPlan(env.DB,s.id,dateKey,s.start_minute,s.end_minute);
