@@ -64,6 +64,12 @@ async function dailyPlan(DB,id,dateKey,start,end){
   return JSON.parse(saved.planned_times);
 }
 async function vapid(endpoint,env){
+  if(typeof env.VAPID_PUBLIC_KEY!=="string" || !env.VAPID_PUBLIC_KEY.trim()){
+    throw new Error("Missing Cloudflare Worker variable: VAPID_PUBLIC_KEY (Production environment).");
+  }
+  if(typeof env.VAPID_PRIVATE_KEY!=="string" || !env.VAPID_PRIVATE_KEY.trim()){
+    throw new Error("Missing Cloudflare Worker secret: VAPID_PRIVATE_KEY (Production environment).");
+  }
   const u=new URL(endpoint), now=Math.floor(Date.now()/1000);
   const pub=un64(env.VAPID_PUBLIC_KEY);
   const jwk={kty:"EC",crv:"P-256",x:b64u(pub.slice(1,33)),y:b64u(pub.slice(33,65)),d:env.VAPID_PRIVATE_KEY,ext:true};
