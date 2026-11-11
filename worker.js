@@ -122,8 +122,21 @@ async function preferences(request,env){
   await env.DB.prepare("UPDATE preferences SET start_minute=?,end_minute=?,updated_at=CURRENT_TIMESTAMP WHERE subscription_id=?").bind(start,end,s.id).run();
   return json({ok:true});
 }
-async function scheduler(env){
+async function ensureDiagnostics(DB){
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS scheduler_heartbeat (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_run TEXT,
+    last_cron TEXT,
+    runs INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT
+  )`).run();
+  await DB.prepare("INSERT OR IGNORE INTO scheduler_heartbeat(id,runs) VALUES(1,0)").run();
+}
+async function scheduler(env, controller){
+  await ensureDiagnostics(env.DB);
   const {dateKey,minute}=localNow();
+  await env.DB.prepare("UPDATE scheduler_heartbeat SET last_run=?,last_cron=?,runs=runs+1,last_error=NULL WHERE id=1")
+    .bind(new Date().toISOString(),controller?.cron||"unknown").run();
   const {results=[]}=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,p.start_minute,p.end_minute
     FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id WHERE p.enabled=1`).all();
   for(const s of results){
@@ -167,12 +180,14 @@ export default {
     const path=new URL(request.url).pathname;
     try{
       if(request.method==="GET"&&path==="/status"){
+        await ensureDiagnostics(env.DB);
         const now=localNow();
         const {results=[]}=await env.DB.prepare(`SELECT p.start_minute,p.end_minute,p.enabled,
           (SELECT COUNT(*) FROM sent_notifications n WHERE n.subscription_id=s.id) AS sent_count,
           (SELECT MAX(sent_at) FROM sent_notifications n WHERE n.subscription_id=s.id) AS last_attempt
           FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id`).all();
-        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,subscriptions:results});
+        const heartbeat=await env.DB.prepare("SELECT last_run,last_cron,runs,last_error FROM scheduler_heartbeat WHERE id=1").first();
+        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,heartbeat,subscriptions:results});
       }
       if(request.method==="GET"&&path==="/health"){
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
@@ -183,5 +198,14 @@ export default {
       return json({error:"Not found"},404);
     }catch(e){console.error(e);return json({error:e.message||"Server error"},500);}
   },
-  async scheduled(controller,env,ctx){ctx.waitUntil(scheduler(env));}
+  async scheduled(controller,env,ctx){
+    ctx.waitUntil(scheduler(env,controller).catch(async error=>{
+      console.error("Hydrate scheduler crashed",error);
+      try{
+        await ensureDiagnostics(env.DB);
+        await env.DB.prepare("UPDATE scheduler_heartbeat SET last_error=?,last_run=?,last_cron=?,runs=runs+1 WHERE id=1")
+          .bind(error?.message||String(error),new Date().toISOString(),controller?.cron||"unknown").run();
+      }catch(logError){console.error("Could not record scheduler failure",logError);}
+    }));
+  }
 };
