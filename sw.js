@@ -1,4 +1,4 @@
-const CACHE="hydrate-shell-v6";
+const CACHE="hydrate-shell-v7";
 const FILES=["./","./index.html","./styles.css","./app.js","./manifest.json","./icon.svg"];
 self.addEventListener("install",e=>e.waitUntil((async()=>{const c=await caches.open(CACHE);await c.addAll(FILES);await self.skipWaiting()})()));
 self.addEventListener("activate",e=>e.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(x=>x.startsWith("hydrate-shell-")&&x!==CACHE).map(x=>caches.delete(x)));await self.clients.claim()})()));
