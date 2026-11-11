@@ -97,6 +97,34 @@ async function push(sub,payload,env){
     TTL:"86400",Urgency:"normal"
   },body});
 }
+async function testPush(request,env){
+  const b=await request.json();
+  if(!b.endpoint)return json({error:"Missing registered device endpoint"},400);
+  const s=await env.DB.prepare("SELECT id,endpoint,p256dh,auth FROM subscriptions WHERE endpoint=?").bind(b.endpoint).first();
+  if(!s)return json({error:"This iPhone is not registered. Use the app's notification setup first."},404);
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS test_push_rate_limit (id INTEGER PRIMARY KEY CHECK(id=1), last_sent INTEGER NOT NULL DEFAULT 0)").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO test_push_rate_limit(id,last_sent) VALUES(1,0)").run();
+  const now=Math.floor(Date.now()/1000);
+  const lock=await env.DB.prepare("UPDATE test_push_rate_limit SET last_sent=? WHERE id=1 AND last_sent<?").bind(now,now-30).run();
+  if(!lock.meta?.changes)return json({error:"A test push was sent recently. Wait 30 seconds and try again."},429);
+  try{
+    const result=await push(s,{title:"Hydrate",body:"This is a remote test notification from Cloudflare. 💧",url:"https://gouthamplay.github.io/Hydrate/",tag:"hydrate-remote-test-"+now},env);
+    if(result.status===404||result.status===410){
+      await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
+      return json({error:"Apple Push Service says this subscription has expired. Re-register notifications in the app."},410);
+    }
+    if(!result.ok){
+      const detail=(await result.text()).slice(0,300);
+      console.error("Hydrate test push rejected",JSON.stringify({status:result.status,detail}));
+      return json({error:"Push service rejected the request.",pushStatus:result.status,detail},502);
+    }
+    console.log("Hydrate remote test accepted",JSON.stringify({status:result.status}));
+    return json({ok:true,message:"Remote push accepted by Apple Push Service.",pushStatus:result.status});
+  }catch(e){
+    console.error("Hydrate test push failed",e);
+    return json({error:e?.message||"Push delivery request failed"},500);
+  }
+}
 async function subscribe(request,env){
   const b=await request.json(),s=b.subscription;
   if(!s?.endpoint||!s.keys?.p256dh||!s.keys?.auth)return json({error:"Invalid subscription"},400);
@@ -201,6 +229,7 @@ export default {
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
         return json({ok:true,service:"Hydrate API",database:"connected",subscriptions:r.count});
       }
+      if(request.method==="POST"&&path==="/test-push")return await testPush(request,env);
       if(request.method==="POST"&&path==="/subscribe")return await subscribe(request,env);
       if(request.method==="POST"&&path==="/preferences")return await preferences(request,env);
       return json({error:"Not found"},404);
