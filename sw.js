@@ -1,4 +1,4 @@
-const CACHE="hydrate-shell-v19";
+const CACHE="hydrate-shell-v20";
 const HYDRATION_MESSAGES=["A little sip can make a nice difference.","Your water break is waiting. 💧","Pause what you're doing. Time to hydrate.","Give yourself a quick refresh.","Your bottle called. It misses you.","A quick sip before the next big thing.","Take a moment. Refill yourself.","Water break? Sounds like a good idea.","A little water, then back to it.","Keep your day flowing. 💧"];
 const MOTIVATION_MESSAGES=["Small habits. Big changes.","Progress is built one little action at a time.","Make time for yourself, too.","Keep showing up for yourself.","You deserve the same care you give everything else.","Great things start with small habits.","Consistency beats perfection.","Be proud of the little things you do for yourself."];
 function reminderBody(){return Math.random()<0.8?HYDRATION_MESSAGES[Math.floor(Math.random()*HYDRATION_MESSAGES.length)]:MOTIVATION_MESSAGES[Math.floor(Math.random()*MOTIVATION_MESSAGES.length)]}
