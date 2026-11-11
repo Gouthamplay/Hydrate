@@ -9,4 +9,16 @@
 <section class="card settings"><p class="kicker">YOUR ROUTINE</p><h2>Reminder window</h2><div class="field"><label for="start">Start</label><input id="start" type="time" value="07:00"></div><div class="field"><label for="end">End</label><input id="end" type="time" value="21:00"></div><div class="field"><label>Frequency</label><span class="fixed">Every 1 hour</span></div><button class="outline" id="save">Save settings</button><div class="divider"></div><div class="flex"><div><b>Push notifications</b><p class="muted tiny" id="pushState">Not configured yet</p></div><button class="small" id="notify">Test notification</button></div><p class="tiny muted">Use the test button to check notification permission and display. Scheduled reminders require the separate Web Push backend.</p></section>
 <section class="card history"><div class="flex"><div><p class="kicker">YOUR PROGRESS</p><h2>This month</h2></div><span class="muted" id="month"></span></div><div class="monthrate"><strong id="rate">—</strong><span>of answered check-ins marked Yes</span></div><div class="calendar" id="calendar"></div><button class="outline" id="export">Export backup (.json)</button><label class="restore">Restore backup<input id="import" type="file" accept="application/json,.json"></label><p class="tiny muted">History stays in this browser on this device. Export backups regularly; clearing website data can erase it.</p></section>
 <footer><span>Consistency over perfection.</span><span>LOCAL DATA ONLY</span></footer>
-</main><div id="toast" role="status"></div><script src="./app.js" defer></script></body></html>
+</main><section class="checkin-overlay" id="checkinOverlay" aria-hidden="true">
+  <div class="checkin-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinTitle">
+    <p class="kicker">HYDRATE CHECK-IN</p>
+    <h2 id="checkinTitle">Did you drink water?</h2>
+    <p class="muted">Log this reminder before you get back to your day.</p>
+    <div class="checkin-actions">
+      <button class="yes" id="promptYes">Yes, I drank</button>
+      <button class="no" id="promptNo">Not yet</button>
+    </div>
+    <button class="dismiss-prompt" id="dismissPrompt">Maybe later</button>
+  </div>
+</section>
+<div id="toast" role="status"></div><script src="./app.js" defer></script></body></html>
