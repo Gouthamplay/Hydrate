@@ -21,7 +21,6 @@
 .menu-item{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:4px;padding:15px 10px;border:0;border-radius:12px;background:transparent;color:var(--ink);font-size:14px}
 .menu-item:active{background:var(--paper)}
 .menu-item small{font-size:10px;color:var(--muted);font-weight:450}
-.menu-item.danger span{color:#a34f42}
 .menu-divider{height:1px;background:var(--line);margin:10px 0}
 .menu-foot{margin-top:auto;color:var(--muted);font-size:10px;padding:10px}
 .profile-overlay{position:fixed;inset:0;z-index:40;background:#10201866;display:none;align-items:center;justify-content:center;padding:22px}
@@ -83,7 +82,6 @@ body{background:radial-gradient(ellipse at 90% 0%,#d8f2ff 0%,transparent 42%),li
 .clear-logs{width:100%;margin-top:17px;border:1px solid #edc8c2;background:#fff5f3;color:#a8443a;padding:14px}
 .settings-privacy{text-align:center;color:#8aa0ae;font-size:10px;padding:10px 0}
 
-.quick-history{margin-top:13px;padding-top:12px;border-top:1px solid #cce8f5}.quick-title{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#6e91a4;font-weight:750;margin:0 0 8px}.quick-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:11px;color:#55758a}.quick-row b{font-size:10px;color:#087eb8}
 
 /* Show ad-hoc check-ins inside the matching hourly tile */
 .slot{min-height:64px;padding:9px 3px;overflow-wrap:anywhere}
