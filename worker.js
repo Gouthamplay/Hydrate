@@ -181,6 +181,14 @@ async function ensureDiagnostics(DB){
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(subscription_id,bucket_key)
   )`).run();
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS sent_notifications (
+    id TEXT PRIMARY KEY,
+    subscription_id TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL,
+    reminder_type TEXT NOT NULL,
+    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(subscription_id,scheduled_at)
+  )`).run();
 }
 async function scheduler(env, controller){
   await ensureDiagnostics(env.DB);
@@ -192,37 +200,55 @@ async function scheduler(env, controller){
   const {results=[]}=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,p.start_minute,p.end_minute
     FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id WHERE p.enabled=1`).all();
 
-  const debug={dateKey,minute,subscriptionCount:results.length,intervalMinutes:5,subscriptions:[]};
+  const debug={dateKey,minute,subscriptionCount:results.length,mode:"hourly",subscriptions:[]};
   for(const s of results){
-    const active=minute>=s.start_minute && minute<=s.end_minute;
-    const bucketMinute=Math.floor(minute/5)*5;
-    const bucketKey=dateKey+"T"+String(Math.floor(bucketMinute/60)).padStart(2,"0")+":"+String(bucketMinute%60).padStart(2,"0");
-    const entry={start:s.start_minute,end:s.end_minute,active,bucketKey,status:active?"waiting":"outside-window"};
-    if(active){
-      // Ignore malformed/old subscription rows rather than letting one bad
-      // device record abort the scheduled delivery loop.
-      if(!s.endpoint || !s.p256dh || !s.auth){
-        entry.status="invalid-subscription-data";
-        entry.missingFields=[...(!s.endpoint?["endpoint"]:[]),...(!s.p256dh?["p256dh"]:[]),...(!s.auth?["auth"]:[])];
-        debug.subscriptions.push(entry);
-        continue;
+    if(!s.endpoint || !s.p256dh || !s.auth){
+      debug.subscriptions.push({id:s.id,status:"invalid-subscription-data"});
+      continue;
+    }
+    const inWindow = minute>=s.start_minute && minute<=s.end_minute;
+    if(!inWindow){
+      debug.subscriptions.push({start:s.start_minute,end:s.end_minute,minute,status:"outside-window"});
+      continue;
+    }
+
+    // Check the current minute and up to four preceding minutes so a delayed
+    // Cron invocation does not silently miss a scheduled reminder.
+    const plan = await dailyPlan(env.DB, s.id, dateKey, s.start_minute, s.end_minute);
+    const due = [];
+    for(let m=Math.max(0,minute-4); m<=minute; m++){
+      if(m<s.start_minute || m>s.end_minute) continue;
+      const hourly = (m - s.start_minute) % 60 === 0;
+      const surprise = plan.includes(m);
+      if(hourly || surprise){
+        due.push({minute:m, type:hourly?"hourly":"surprise"});
       }
-      // A dedicated primary-key lock guarantees one delivery per device per
-      // five-minute bucket, regardless of overlapping Cron invocations.
-      const lock=await env.DB.prepare("INSERT OR IGNORE INTO delivery_locks(subscription_id,bucket_key) VALUES(?,?)")
+    }
+
+    if(!due.length){
+      debug.subscriptions.push({start:s.start_minute,end:s.end_minute,minute,status:"waiting-next-slot"});
+      continue;
+    }
+
+    for(const item of due){
+      const m = item.minute;
+      const bucketKey = dateKey+"T"+String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+      const entry = {start:s.start_minute,end:s.end_minute,dueMinute:m,type:item.type,bucketKey,status:"waiting"};
+
+      const lock = await env.DB.prepare("INSERT OR IGNORE INTO delivery_locks(subscription_id,bucket_key) VALUES(?,?)")
         .bind(s.id,bucketKey).run();
       if(lock.meta?.changes){
         entry.status="sending";
         try{
-          const pool=Math.random()<0.8?hydration:motivation;
-          const result=await push(s,{
+          const pool = Math.random()<0.8?hydration:motivation;
+          const result = await push(s,{
             title:"Hydrate",
             body:pool[randomInt(pool.length)],
             url:"https://gouthamplay.github.io/Hydrate/",
-            tag:"hydrate-"+dateKey+"-"+bucketMinute,
+            tag:"hydrate-"+dateKey+"-"+m,
             dateKey,
-            slotMinutes:s.start_minute+Math.floor((bucketMinute-s.start_minute)/60)*60,
-            reminderType:"test-5-minute"
+            slotMinutes:s.start_minute+Math.floor((m-s.start_minute)/60)*60,
+            reminderType:item.type
           },env);
           if(result.status===404||result.status===410){
             await env.DB.prepare("DELETE FROM subscriptions WHERE id=?").bind(s.id).run();
@@ -233,11 +259,13 @@ async function scheduler(env, controller){
             entry.status="push-rejected";
             entry.pushStatus=result.status;
             entry.detail=detail;
-            console.error("Hydrate scheduled push rejected",JSON.stringify({status:result.status,detail,bucketKey}));
+            console.error("Hydrate scheduled push rejected",JSON.stringify({status:result.status,detail,bucketKey,type:item.type}));
           }else{
             entry.status="accepted";
             entry.pushStatus=result.status;
-            console.log("Hydrate scheduled push accepted",JSON.stringify({status:result.status,bucketKey}));
+            await env.DB.prepare("INSERT OR IGNORE INTO sent_notifications(id,subscription_id,scheduled_at,reminder_type) VALUES(?,?,?,?)")
+              .bind(crypto.randomUUID(),s.id,bucketKey,item.type).run();
+            console.log("Hydrate scheduled push accepted",JSON.stringify({status:result.status,bucketKey,type:item.type}));
           }
         }catch(error){
           await env.DB.prepare("DELETE FROM delivery_locks WHERE subscription_id=? AND bucket_key=?").bind(s.id,bucketKey).run();
@@ -249,8 +277,8 @@ async function scheduler(env, controller){
       }else{
         entry.status="already-processed";
       }
+      debug.subscriptions.push(entry);
     }
-    debug.subscriptions.push(entry);
   }
   await env.DB.prepare("UPDATE scheduler_debug SET details=?,updated_at=? WHERE id=1")
     .bind(JSON.stringify(debug),new Date().toISOString()).run();
