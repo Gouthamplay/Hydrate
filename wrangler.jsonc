@@ -4,6 +4,9 @@
   "main": "worker.js",
   "compatibility_date": "2026-11-11",
   "workers_dev": true,
+  "vars": {
+    "VAPID_PUBLIC_KEY": "BHGpfDlb42JYGsZb553YAlkxETVnKsFfgTvd8ZVpXhSMP-_VfE-8qc7QIPE1gtSPlJfwE_gr3OqMs8PW2ZmTYHg"
+  },
   "d1_databases": [
     {
       "binding": "DB",

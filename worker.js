@@ -63,15 +63,22 @@ async function dailyPlan(DB,id,dateKey,start,end){
   const saved=await DB.prepare("SELECT planned_times FROM daily_plans WHERE subscription_id=? AND date_key=?").bind(id,dateKey).first();
   return JSON.parse(saved.planned_times);
 }
+const DEFAULT_VAPID_PUBLIC_KEY = "BHGpfDlb42JYGsZb553YAlkxETVnKsFfgTvd8ZVpXhSMP-_VfE-8qc7QIPE1gtSPlJfwE_gr3OqMs8PW2ZmTYHg";
+
+function getVapidPublicKey(env){
+  return (typeof env?.VAPID_PUBLIC_KEY === "string" && env.VAPID_PUBLIC_KEY.trim()) || DEFAULT_VAPID_PUBLIC_KEY;
+}
+
 async function vapid(endpoint,env){
-  if(typeof env.VAPID_PUBLIC_KEY!=="string" || !env.VAPID_PUBLIC_KEY.trim()){
+  const pubKey = getVapidPublicKey(env);
+  if(!pubKey){
     throw new Error("Missing Cloudflare Worker variable: VAPID_PUBLIC_KEY (Production environment).");
   }
   if(typeof env.VAPID_PRIVATE_KEY!=="string" || !env.VAPID_PRIVATE_KEY.trim()){
     throw new Error("Missing Cloudflare Worker secret: VAPID_PRIVATE_KEY (Production environment).");
   }
   const u=new URL(endpoint), now=Math.floor(Date.now()/1000);
-  const pub=un64(env.VAPID_PUBLIC_KEY);
+  const pub=un64(pubKey);
   const jwk={kty:"EC",crv:"P-256",x:b64u(pub.slice(1,33)),y:b64u(pub.slice(33,65)),d:env.VAPID_PRIVATE_KEY,ext:true};
   const key=await crypto.subtle.importKey("jwk",jwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
   const h=b64u(bytes(JSON.stringify({typ:"JWT",alg:"ES256"})));
@@ -96,9 +103,10 @@ async function encryptedBody(sub,payload){
   return join(salt,new Uint8Array([0,0,16,0]),new Uint8Array([serverPub.length]),serverPub,cipher);
 }
 async function push(sub,payload,env){
+  const pubKey=getVapidPublicKey(env);
   const token=await vapid(sub.endpoint,env), body=await encryptedBody(sub,payload);
   return fetch(sub.endpoint,{method:"POST",headers:{
-    Authorization:"vapid t="+token+", k="+env.VAPID_PUBLIC_KEY,
+    Authorization:"vapid t="+token+", k="+pubKey,
     "Content-Type":"application/octet-stream","Content-Encoding":"aes128gcm",
     TTL:"86400",Urgency:"normal"
   },body});
@@ -236,7 +244,7 @@ async function scheduler(env, controller){
           entry.status="exception";
           entry.error=error?.message||String(error);
           entry.stack=String(error?.stack||"").slice(0,700);
-          console.error("Hydrate scheduled push exception",JSON.stringify({error:entry.error,stack:entry.stack,bucketKey,hasEndpoint:!!s.endpoint,hasP256dh:!!s.p256dh,hasAuth:!!s.auth,hasVapidPublic:!!env.VAPID_PUBLIC_KEY,hasVapidPrivate:!!env.VAPID_PRIVATE_KEY}));
+          console.error("Hydrate scheduled push exception",JSON.stringify({error:entry.error,stack:entry.stack,bucketKey,hasEndpoint:!!s.endpoint,hasP256dh:!!s.p256dh,hasAuth:!!s.auth,hasVapidPublic:!!getVapidPublicKey(env),hasVapidPrivate:!!env.VAPID_PRIVATE_KEY}));
         }
       }else{
         entry.status="already-processed";
@@ -261,7 +269,19 @@ export default {
           FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id`).all();
         const heartbeat=await env.DB.prepare("SELECT last_run,last_cron,runs,last_error FROM scheduler_heartbeat WHERE id=1").first();
         const schedulerDebug=await env.DB.prepare("SELECT details,updated_at FROM scheduler_debug WHERE id=1").first();
-        return json({ok:true,timezone:TZ,localDate:now.dateKey,localMinute:now.minute,heartbeat,schedulerDebug,subscriptions:results});
+        return json({
+          ok:true,
+          timezone:TZ,
+          localDate:now.dateKey,
+          localMinute:now.minute,
+          vapidConfigured:{
+            hasPublicKey:Boolean(getVapidPublicKey(env)),
+            hasPrivateKeySecret:Boolean(typeof env?.VAPID_PRIVATE_KEY==="string"&&env.VAPID_PRIVATE_KEY.trim())
+          },
+          heartbeat,
+          schedulerDebug,
+          subscriptions:results
+        });
       }
       if(request.method==="GET"&&path==="/health"){
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
