@@ -43,6 +43,11 @@
   <header class="nav">
     <a class="logo" href="./"><span class="drop"><img src="./apple-touch-icon.png" alt=""></span>hydrate<span class="dot">.</span></a>
     <div class="nav-actions">
+      <button class="auth-pill" id="authPill" aria-label="Account and cloud sync">
+        <span class="auth-pill-avatar" id="authPillAvatar">👤</span>
+        <span class="auth-pill-text" id="authPillText">Sign in</span>
+        <span class="auth-sync-dot" id="authSyncDot" title="Cloud sync active" hidden></span>
+      </button>
       <button class="theme-quick-btn" id="quickThemeBtn" aria-label="Cycle theme" title="Switch theme"><span id="quickThemeIcon">☀️</span></button>
       <button class="menu-trigger" id="menuTrigger" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
     </div>
@@ -127,6 +132,29 @@
       </div>
     </div>
 
+    <section class="card account-card" id="settingsAccountCard">
+      <div class="flex">
+        <div>
+          <p class="kicker">ACCOUNT & CLOUD SYNC</p>
+          <h2 id="settingsAccountTitle">Free cloud sync</h2>
+        </div>
+        <span class="account-plan-badge">100% Free</span>
+      </div>
+      <p class="muted" id="settingsAccountDesc">Create a free account to back up and sync your check-ins and streaks across iPhone, Mac, and web browsers.</p>
+      <div class="account-user-banner" id="accountUserBanner" hidden>
+        <div class="account-user-meta">
+          <strong class="account-user-name" id="accountUserName">User</strong>
+          <span class="account-user-email" id="accountUserEmail">email@example.com</span>
+        </div>
+        <span class="account-sync-state" id="accountSyncState">● Cloud sync active</span>
+      </div>
+      <div class="account-actions">
+        <button class="yes" id="accountPrimaryBtn">Sign in or create account</button>
+        <button class="outline" id="accountSyncBtn" hidden>Sync now</button>
+        <button class="outline danger-text" id="accountLogoutBtn" hidden>Log out</button>
+      </div>
+    </section>
+
     <section class="card settings">
       <p class="kicker">APPEARANCE</p>
       <h2>Theme</h2>
@@ -184,6 +212,14 @@
 <div class="menu-backdrop" id="menuBackdrop"></div>
 <aside class="app-menu" id="appMenu" aria-hidden="true">
   <div class="menu-head"><strong>Hydrate</strong><button id="menuClose" aria-label="Close menu">×</button></div>
+  <div class="menu-account-card" id="menuAccountCard">
+    <div class="menu-account-avatar" id="menuAccountAvatar">👤</div>
+    <div class="menu-account-details">
+      <strong id="menuAccountName">Guest user</strong>
+      <small id="menuAccountStatus">Local only · Tap to sign in</small>
+    </div>
+    <button class="menu-account-btn" id="menuAccountBtn">Sign In</button>
+  </div>
   <button class="menu-item" id="menuProfile"><span>Profile</span><small>Personal details</small></button>
   <button class="menu-item" id="menuSettings"><span>Settings</span><small>Routine and data controls</small></button>
   <button class="menu-item" id="menuTheme">
@@ -214,6 +250,46 @@
     <div class="checkin-actions">
       <button class="yes" id="promptYes">Yes, I drank</button>
       <button class="no" id="promptNo">Not yet</button>
+    </div>
+  </div>
+</section>
+
+<section class="auth-overlay" id="authOverlay" aria-hidden="true">
+  <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="authDialogTitle">
+    <div class="auth-header">
+      <div>
+        <p class="kicker">HYDRATE CLOUD (FREE TIER)</p>
+        <h2 id="authDialogTitle">Sign in to Hydrate</h2>
+      </div>
+      <button id="authClose" class="auth-close" aria-label="Close dialog">×</button>
+    </div>
+    <p class="auth-sub" id="authDialogSub">Access your check-ins, history, and settings from any device. 100% free.</p>
+
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" id="tabLogin" role="tab" aria-selected="true">Sign In</button>
+      <button class="auth-tab" id="tabSignup" role="tab" aria-selected="false">Create Account</button>
+    </div>
+
+    <div class="auth-error" id="authError" hidden></div>
+
+    <form class="auth-form" id="authForm" onsubmit="return false;">
+      <div class="field" id="authNameField" hidden>
+        <label for="authName">Your name</label>
+        <input id="authName" type="text" autocomplete="name" placeholder="Your name" maxlength="40">
+      </div>
+      <div class="field">
+        <label for="authEmail">Email address</label>
+        <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="authPassword">Password</label>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
+      </div>
+      <button class="yes auth-submit" id="authSubmit" type="submit">Sign In</button>
+    </form>
+
+    <div class="auth-foot">
+      <p class="tiny muted" id="authSwitchPrompt">Don't have an account? <a href="#" id="authSwitchLink">Create one free</a></p>
     </div>
   </div>
 </section>

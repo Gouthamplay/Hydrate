@@ -158,15 +158,15 @@ function render(){
 function showCheckinPrompt(){const el=$("checkinOverlay");el.classList.add("visible");el.setAttribute("aria-hidden","false")}
 function hideCheckinPrompt(){const el=$("checkinOverlay");el.classList.remove("visible");el.setAttribute("aria-hidden","true")}
 function currentSlot(now=new Date()){const t=times();if(!t.length)return null;const m=now.getHours()*60+now.getMinutes();let target=t[0];for(const x of t){if(x<=m)target=x;else break}return target}
-function answer(v){const now=new Date(),target=currentSlot(now),day=key(now);hideCheckinPrompt();if(target===null){toast("No check-in times are configured.");return}const l=state.logs[day]||{};state.logs[day]={...l,[target]:{status:v,timestamp:now.toISOString()}};persist();render();$("feedback").textContent="Reminder recorded at "+exactTime(now)+".";toast((v==="yes"?"Reminder marked Yes at ":"Reminder marked No at ")+exactTime(now))}
-function quickCheckin(){const now=new Date();state.quickChecks=Array.isArray(state.quickChecks)?state.quickChecks:[];state.quickChecks.push({date:key(now),timestamp:now.toISOString(),status:"yes"});persist();render();$("feedback").textContent="Quick check-in saved at "+exactTime(now)+".";toast("Check-in logged at "+exactTime(now))}
+function answer(v){const now=new Date(),target=currentSlot(now),day=key(now);hideCheckinPrompt();if(target===null){toast("No check-in times are configured.");return}const l=state.logs[day]||{};state.logs[day]={...l,[target]:{status:v,timestamp:now.toISOString()}};persist();render();debouncedSync();$("feedback").textContent="Reminder recorded at "+exactTime(now)+".";toast((v==="yes"?"Reminder marked Yes at ":"Reminder marked No at ")+exactTime(now))}
+function quickCheckin(){const now=new Date();state.quickChecks=Array.isArray(state.quickChecks)?state.quickChecks:[];state.quickChecks.push({date:key(now),timestamp:now.toISOString(),status:"yes"});persist();render();debouncedSync();$("feedback").textContent="Quick check-in saved at "+exactTime(now)+".";toast("Check-in logged at "+exactTime(now))}
 function renderMonth(){let d=new Date(),y=d.getFullYear(),mo=d.getMonth(),count=new Date(y,mo+1,0).getDate(),offset=new Date(y,mo,1).getDay(),total=0,yes=0,h="";for(let i=0;i<offset;i++)h+="<div></div>";for(let n=1;n<=count;n++){let k=key(new Date(y,mo,n)),vals=Object.values(state.logs[k]||{});total+=vals.length;yes+=vals.filter(x=>statusOf(x)==="yes").length;const extra=(state.quickChecks||[]).filter(x=>x.date===k);total+=extra.length;yes+=extra.filter(x=>x.status==="yes").length;h+='<div class="'+(vals.length&&vals.every(x=>statusOf(x)==="yes")?"good ":"")+(n===d.getDate()?"today":"")+'">'+n+"</div>"}$("month").textContent=d.toLocaleDateString([],{month:"short",year:"numeric"});$("rate").textContent=total?Math.round(yes/total*100)+"%":"—";$("calendar").innerHTML=h}
 
 $("yes").onclick=quickCheckin;
 $("save").onclick=()=>{
   let a=$("start").value,b=$("end").value;
   if(!a||!b||b<=a){toast("End time must be after start time.");return}
-  state.start=a;state.end=b;persist();render();
+  state.start=a;state.end=b;persist();render();debouncedSync();
   if(localStorage.getItem(PUSH_SUB_KEY)){
     syncPushPreferences().then(()=>toast("Reminder window saved and synced.")).catch(e=>toast("Saved locally; cloud sync failed."));
   }else toast("Reminder window saved.");
@@ -258,3 +258,296 @@ $("remoteTest").onclick=async()=>{
     toast("Remote push accepted. Check your iPhone notifications.");
   }catch(e){toast(e.message||"Could not send remote test.");console.error(e)}
 };
+
+/* User Authentication & Cloud Sync */
+const AUTH_TOKEN_KEY="hydrate-auth-token";
+const AUTH_USER_KEY="hydrate-auth-user";
+let currentUser=readAuthUser();
+let isSyncing=false;
+let syncTimeout=null;
+let authMode="login";
+
+function getAuthToken(){
+  try{return localStorage.getItem(AUTH_TOKEN_KEY)||null}catch{return null}
+}
+
+function readAuthUser(){
+  try{return JSON.parse(localStorage.getItem(AUTH_USER_KEY)||"null")}catch{return null}
+}
+
+function setAuthSession(token,user){
+  try{
+    if(token)localStorage.setItem(AUTH_TOKEN_KEY,token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
+    if(user)localStorage.setItem(AUTH_USER_KEY,JSON.stringify(user));
+    else localStorage.removeItem(AUTH_USER_KEY);
+  }catch{}
+  currentUser=user;
+  updateAuthUI();
+}
+
+function updateAuthUI(){
+  const pillText=$("authPillText");
+  const syncDot=$("authSyncDot");
+  const menuName=$("menuAccountName");
+  const menuStatus=$("menuAccountStatus");
+  const menuBtn=$("menuAccountBtn");
+  const cardTitle=$("settingsAccountTitle");
+  const cardDesc=$("settingsAccountDesc");
+  const banner=$("accountUserBanner");
+  const userName=$("accountUserName");
+  const userEmail=$("accountUserEmail");
+  const primaryBtn=$("accountPrimaryBtn");
+  const syncBtn=$("accountSyncBtn");
+  const logoutBtn=$("accountLogoutBtn");
+
+  if(currentUser){
+    const displayName=currentUser.name||currentUser.email.split("@")[0];
+    if(pillText)pillText.textContent=displayName.slice(0,10);
+    if(syncDot)syncDot.hidden=false;
+    if(menuName)menuName.textContent=displayName;
+    if(menuStatus)menuStatus.textContent=currentUser.email+" · Free tier";
+    if(menuBtn)menuBtn.textContent="Log out";
+    if(cardTitle)cardTitle.textContent="Cloud sync active";
+    if(cardDesc)cardDesc.textContent="Your hydration streaks and history are automatically backed up to your free account.";
+    if(banner)banner.hidden=false;
+    if(userName)userName.textContent=displayName;
+    if(userEmail)userEmail.textContent=currentUser.email;
+    if(primaryBtn)primaryBtn.hidden=true;
+    if(syncBtn)syncBtn.hidden=false;
+    if(logoutBtn)logoutBtn.hidden=false;
+  }else{
+    if(pillText)pillText.textContent="Sign in";
+    if(syncDot)syncDot.hidden=true;
+    if(menuName)menuName.textContent="Guest user";
+    if(menuStatus)menuStatus.textContent="Local device only · Tap to sign in";
+    if(menuBtn)menuBtn.textContent="Sign in";
+    if(cardTitle)cardTitle.textContent="Free cloud sync";
+    if(cardDesc)cardDesc.textContent="Create a free account to back up and sync your check-ins and streaks across iPhone, Mac, and web browsers.";
+    if(banner)banner.hidden=true;
+    if(primaryBtn)primaryBtn.hidden=false;
+    if(syncBtn)syncBtn.hidden=true;
+    if(logoutBtn)logoutBtn.hidden=true;
+  }
+}
+
+function openAuthDialog(mode="login"){
+  authMode=mode;
+  const overlay=$("authOverlay");
+  const title=$("authDialogTitle");
+  const tabLogin=$("tabLogin");
+  const tabSignup=$("tabSignup");
+  const nameField=$("authNameField");
+  const submitBtn=$("authSubmit");
+  const prompt=$("authSwitchPrompt");
+  const error=$("authError");
+
+  if(error){error.hidden=true;error.textContent="";}
+
+  if(mode==="signup"){
+    title.textContent="Create Free Account";
+    tabLogin.classList.remove("active");
+    tabLogin.setAttribute("aria-selected","false");
+    tabSignup.classList.add("active");
+    tabSignup.setAttribute("aria-selected","true");
+    nameField.hidden=false;
+    submitBtn.textContent="Create Account";
+    prompt.innerHTML='Already have an account? <a href="#" id="authSwitchLink">Sign in</a>';
+  }else{
+    title.textContent="Sign in to Hydrate";
+    tabLogin.classList.add("active");
+    tabLogin.setAttribute("aria-selected","true");
+    tabSignup.classList.remove("active");
+    tabSignup.setAttribute("aria-selected","false");
+    nameField.hidden=true;
+    submitBtn.textContent="Sign In";
+    prompt.innerHTML='Don\'t have an account? <a href="#" id="authSwitchLink">Create one free</a>';
+  }
+
+  const switchLink=$("authSwitchLink");
+  if(switchLink){
+    switchLink.onclick=(e)=>{
+      e.preventDefault();
+      openAuthDialog(authMode==="signup"?"login":"signup");
+    };
+  }
+
+  overlay.classList.add("visible");
+  overlay.setAttribute("aria-hidden","false");
+  setTimeout(()=>{
+    const targetInput=mode==="signup"?$("authName"):$("authEmail");
+    if(targetInput)targetInput.focus();
+  },50);
+}
+
+function closeAuthDialog(){
+  const overlay=$("authOverlay");
+  overlay.classList.remove("visible");
+  overlay.setAttribute("aria-hidden","true");
+}
+
+async function syncCloudData(showFeedback=false){
+  const token=getAuthToken();
+  if(!token)return;
+  if(isSyncing)return;
+  isSyncing=true;
+  if(showFeedback)toast("Syncing with cloud...");
+
+  let endpoint=null;
+  try{
+    const raw=localStorage.getItem(PUSH_SUB_KEY);
+    if(raw)endpoint=JSON.parse(raw).endpoint;
+  }catch{}
+
+  try{
+    const res=await fetch(HYDRATE_API+"/user/sync",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+token
+      },
+      body:JSON.stringify({
+        logs:state.logs||{},
+        quickChecks:state.quickChecks||[],
+        start:state.start,
+        end:state.end,
+        endpoint
+      })
+    });
+
+    if(res.status===401){
+      setAuthSession(null,null);
+      if(showFeedback)toast("Session expired. Please sign in again.");
+      return;
+    }
+
+    const data=await res.json();
+    if(data.ok&&data.data){
+      state.logs=data.data.logs||{};
+      state.quickChecks=data.data.quickChecks||[];
+      if(data.data.start&&data.data.end){
+        state.start=data.data.start;
+        state.end=data.data.end;
+      }
+      persist();
+      render();
+      if(showFeedback)toast("Cloud sync complete.");
+    }
+  }catch(e){
+    console.error("Sync error:",e);
+    if(showFeedback)toast("Saved locally; cloud unreachable.");
+  }finally{
+    isSyncing=false;
+  }
+}
+
+function debouncedSync(){
+  if(!getAuthToken())return;
+  clearTimeout(syncTimeout);
+  syncTimeout=setTimeout(()=>syncCloudData(false),800);
+}
+
+async function submitAuthForm(){
+  const email=$("authEmail").value.trim();
+  const password=$("authPassword").value;
+  const name=$("authName").value.trim();
+  const error=$("authError");
+  const submitBtn=$("authSubmit");
+
+  if(!email){
+    error.textContent="Please enter your email.";
+    error.hidden=false;
+    return;
+  }
+  if(!password||password.length<6){
+    error.textContent="Password must be at least 6 characters.";
+    error.hidden=false;
+    return;
+  }
+
+  error.hidden=true;
+  submitBtn.disabled=true;
+  const originalText=submitBtn.textContent;
+  submitBtn.textContent="Please wait...";
+
+  try{
+    const endpoint=authMode==="signup"?"/auth/signup":"/auth/login";
+    const payload=authMode==="signup"?{email,password,name}:{email,password};
+    const res=await fetch(HYDRATE_API+endpoint,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){
+      throw new Error(data.error||"Authentication failed. Please try again.");
+    }
+
+    setAuthSession(data.token,data.user);
+    closeAuthDialog();
+    $("authPassword").value="";
+
+    // Upload / merge history with cloud immediately
+    await syncCloudData(false);
+    toast(authMode==="signup"?"Account created! History synced.":"Welcome back, "+(data.user.name||"friend")+"!");
+  }catch(e){
+    error.textContent=e.message||"Something went wrong. Please try again.";
+    error.hidden=false;
+  }finally{
+    submitBtn.disabled=false;
+    submitBtn.textContent=originalText;
+  }
+}
+
+async function handleLogoutClick(){
+  if(!window.confirm("Log out of your Hydrate account? Your check-ins will remain saved on this device."))return;
+  const token=getAuthToken();
+  if(token){
+    fetch(HYDRATE_API+"/auth/logout",{
+      method:"POST",
+      headers:{"Authorization":"Bearer "+token}
+    }).catch(()=>{});
+  }
+  setAuthSession(null,null);
+  toast("Logged out. Continuing in local mode.");
+}
+
+async function checkAuthSession(){
+  const token=getAuthToken();
+  if(!token){updateAuthUI();return}
+  try{
+    const res=await fetch(HYDRATE_API+"/auth/me",{
+      headers:{"Authorization":"Bearer "+token}
+    });
+    if(res.ok){
+      const data=await res.json();
+      if(data.user)setAuthSession(token,data.user);
+      syncCloudData(false);
+    }else if(res.status===401){
+      setAuthSession(null,null);
+    }
+  }catch{
+    updateAuthUI();
+  }
+}
+
+/* Wire Auth UI */
+$("authPill").onclick=()=>{
+  if(currentUser){closeMenu();showPage("settings")}
+  else openAuthDialog("login");
+};
+$("menuAccountBtn").onclick=()=>{
+  closeMenu();
+  if(currentUser)handleLogoutClick();
+  else openAuthDialog("login");
+};
+$("accountPrimaryBtn").onclick=()=>openAuthDialog("signup");
+$("accountSyncBtn").onclick=()=>syncCloudData(true);
+$("accountLogoutBtn").onclick=handleLogoutClick;
+$("authClose").onclick=closeAuthDialog;
+$("authOverlay").onclick=(e)=>{if(e.target===$("authOverlay"))closeAuthDialog()};
+$("tabLogin").onclick=()=>openAuthDialog("login");
+$("tabSignup").onclick=()=>openAuthDialog("signup");
+$("authForm").onsubmit=(e)=>{e.preventDefault();submitAuthForm()};
+
+checkAuthSession();

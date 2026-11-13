@@ -1,9 +1,17 @@
-const CORS = {
-  "Access-Control-Allow-Origin": "https://gouthamplay.github.io",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Content-Type": "application/json"
-};
+function corsHeaders(request){
+  const origin = request?.headers?.get("Origin") || "https://gouthamplay.github.io";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+    "Content-Type": "application/json"
+  };
+}
+const json = (data, status=200, request=null) => new Response(JSON.stringify(data), {
+  status,
+  headers: corsHeaders(request)
+});
 const TZ = "Asia/Kolkata";
 const hydration = [
   "A little sip can make a nice difference.", "Your water break is waiting. 💧",
@@ -19,7 +27,6 @@ const motivation = [
   "Great things start with small habits.", "Consistency beats perfection.",
   "Be proud of the little things you do for yourself."
 ];
-const json = (data, status=200) => new Response(JSON.stringify(data), {status,headers:CORS});
 const enc = new TextEncoder();
 const bytes = s => enc.encode(s);
 function b64u(data) {
@@ -141,29 +148,219 @@ async function testPush(request,env){
 }
 async function subscribe(request,env){
   const b=await request.json(),s=b.subscription;
-  if(!s?.endpoint||!s.keys?.p256dh||!s.keys?.auth)return json({error:"Invalid subscription"},400);
+  if(!s?.endpoint||!s.keys?.p256dh||!s.keys?.auth)return json({error:"Invalid subscription"},400,request);
   const start=parseTime(b.start||"07:00"),end=parseTime(b.end||"21:00");
-  if(end<=start)return json({error:"End time must be after start time"},400);
+  if(end<=start)return json({error:"End time must be after start time"},400,request);
+  const auth=await getAuthUser(request,env).catch(()=>null);
+  const userId=auth?.user_id||b.userId||null;
   const old=await env.DB.prepare("SELECT id FROM subscriptions WHERE endpoint=?").bind(s.endpoint).first();
   const id=old?.id||crypto.randomUUID();
-  await env.DB.prepare(`INSERT INTO subscriptions(id,endpoint,p256dh,auth,expiration_time,updated_at)
-    VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(endpoint) DO UPDATE SET
-    p256dh=excluded.p256dh,auth=excluded.auth,expiration_time=excluded.expiration_time,updated_at=CURRENT_TIMESTAMP`)
-    .bind(id,s.endpoint,s.keys.p256dh,s.keys.auth,s.expirationTime||null).run();
+  await env.DB.prepare(`INSERT INTO subscriptions(id,endpoint,p256dh,auth,expiration_time,user_id,updated_at)
+    VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(endpoint) DO UPDATE SET
+    p256dh=excluded.p256dh,auth=excluded.auth,expiration_time=excluded.expiration_time,
+    user_id=COALESCE(excluded.user_id,subscriptions.user_id),updated_at=CURRENT_TIMESTAMP`)
+    .bind(id,s.endpoint,s.keys.p256dh,s.keys.auth,s.expirationTime||null,userId).run();
   await env.DB.prepare(`INSERT INTO preferences(subscription_id,timezone,start_minute,end_minute,enabled)
     VALUES(?,?,?,?,1) ON CONFLICT(subscription_id) DO UPDATE SET timezone=excluded.timezone,
     start_minute=excluded.start_minute,end_minute=excluded.end_minute,enabled=1,updated_at=CURRENT_TIMESTAMP`)
     .bind(id,TZ,start,end).run();
-  return json({ok:true});
+  return json({ok:true},200,request);
 }
 async function preferences(request,env){
-  const b=await request.json(); if(!b.endpoint)return json({error:"Missing endpoint"},400);
-  const start=parseTime(b.start),end=parseTime(b.end); if(end<=start)return json({error:"Invalid time window"},400);
+  const b=await request.json(); if(!b.endpoint)return json({error:"Missing endpoint"},400,request);
+  const start=parseTime(b.start),end=parseTime(b.end); if(end<=start)return json({error:"Invalid time window"},400,request);
   const s=await env.DB.prepare("SELECT id FROM subscriptions WHERE endpoint=?").bind(b.endpoint).first();
-  if(!s)return json({error:"Subscription not found"},404);
+  if(!s)return json({error:"Subscription not found"},404,request);
   await env.DB.prepare("UPDATE preferences SET start_minute=?,end_minute=?,updated_at=CURRENT_TIMESTAMP WHERE subscription_id=?").bind(start,end,s.id).run();
-  return json({ok:true});
+  return json({ok:true},200,request);
 }
+
+/* User Authentication & Cloud Sync */
+async function hashPassword(password, saltB64){
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    bytes(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"]
+  );
+  const saltBytes = un64(saltB64);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+  return b64u(bits);
+}
+
+function generateSalt(){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return b64u(salt);
+}
+
+function generateToken(){
+  const token = crypto.getRandomValues(new Uint8Array(32));
+  return b64u(token);
+}
+
+async function getAuthUser(request, env){
+  const header = request.headers.get("Authorization") || "";
+  const match = header.match(/^Bearer\s+([A-Za-z0-9_-]+)$/i);
+  if(!match) return null;
+  const token = match[1];
+  const nowIso = new Date().toISOString();
+  const row = await env.DB.prepare(`
+    SELECT s.token, s.user_id, u.id, u.email, u.name
+    FROM sessions s JOIN users u ON u.id = s.user_id
+    WHERE s.token = ? AND s.expires_at > ?
+  `).bind(token, nowIso).first();
+  return row || null;
+}
+
+async function handleSignup(request, env){
+  const b = await request.json().catch(()=>({}));
+  const email = (b.email || "").trim().toLowerCase();
+  const password = b.password || "";
+  const name = (b.name || "").trim() || email.split("@")[0] || "User";
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    return json({ error: "Please enter a valid email address." }, 400, request);
+  }
+  if(password.length < 6){
+    return json({ error: "Password must be at least 6 characters." }, 400, request);
+  }
+  const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+  if(existing){
+    return json({ error: "An account with this email already exists. Please log in." }, 409, request);
+  }
+  const id = crypto.randomUUID();
+  const salt = generateSalt();
+  const hash = await hashPassword(password, salt);
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare("INSERT INTO users(id, email, password_hash, password_salt, name, created_at, updated_at) VALUES(?,?,?,?,?,?,?)")
+    .bind(id, email, hash, salt, name, nowIso, nowIso).run();
+
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await env.DB.prepare("INSERT INTO sessions(token, user_id, expires_at, created_at) VALUES(?,?,?,?)")
+    .bind(token, id, expiresAt, nowIso).run();
+
+  return json({ ok: true, user: { id, email, name }, token }, 200, request);
+}
+
+async function handleLogin(request, env){
+  const b = await request.json().catch(()=>({}));
+  const email = (b.email || "").trim().toLowerCase();
+  const password = b.password || "";
+  if(!email || !password){
+    return json({ error: "Email and password are required." }, 400, request);
+  }
+  const user = await env.DB.prepare("SELECT id, email, password_hash, password_salt, name FROM users WHERE email = ?").bind(email).first();
+  if(!user){
+    return json({ error: "Invalid email or password." }, 401, request);
+  }
+  const hash = await hashPassword(password, user.password_salt);
+  if(hash !== user.password_hash){
+    return json({ error: "Invalid email or password." }, 401, request);
+  }
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await env.DB.prepare("INSERT INTO sessions(token, user_id, expires_at, created_at) VALUES(?,?,?,?)")
+    .bind(token, user.id, expiresAt, new Date().toISOString()).run();
+
+  return json({ ok: true, user: { id: user.id, email: user.email, name: user.name }, token }, 200, request);
+}
+
+async function handleMe(request, env){
+  const auth = await getAuthUser(request, env);
+  if(!auth) return json({ error: "Not authenticated" }, 401, request);
+  return json({ ok: true, user: { id: auth.id, email: auth.email, name: auth.name } }, 200, request);
+}
+
+async function handleLogout(request, env){
+  const header = request.headers.get("Authorization") || "";
+  const match = header.match(/^Bearer\s+([A-Za-z0-9_-]+)$/i);
+  if(match){
+    await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(match[1]).run();
+  }
+  return json({ ok: true }, 200, request);
+}
+
+async function handleGetUserData(request, env){
+  const auth = await getAuthUser(request, env);
+  if(!auth) return json({ error: "Not authenticated" }, 401, request);
+  const row = await env.DB.prepare("SELECT logs, quick_checks, start_time, end_time, updated_at FROM user_data WHERE user_id = ?").bind(auth.user_id).first();
+  if(!row) return json({ ok: true, data: null }, 200, request);
+  return json({
+    ok: true,
+    data: {
+      logs: JSON.parse(row.logs || "{}"),
+      quickChecks: JSON.parse(row.quick_checks || "[]"),
+      start: row.start_time || "07:00",
+      end: row.end_time || "21:00",
+      updatedAt: row.updated_at
+    }
+  }, 200, request);
+}
+
+async function handleSyncUserData(request, env){
+  const auth = await getAuthUser(request, env);
+  if(!auth) return json({ error: "Not authenticated" }, 401, request);
+  const b = await request.json().catch(()=>({}));
+  const existing = await env.DB.prepare("SELECT logs, quick_checks, start_time, end_time, updated_at FROM user_data WHERE user_id = ?").bind(auth.user_id).first();
+  let cloudLogs = {};
+  let cloudQuick = [];
+  if(existing){
+    try { cloudLogs = JSON.parse(existing.logs || "{}"); } catch(e){}
+    try { cloudQuick = JSON.parse(existing.quick_checks || "[]"); } catch(e){}
+  }
+
+  // Merge logs (union: preserves all day slots)
+  const incomingLogs = b.logs && typeof b.logs === "object" ? b.logs : {};
+  const mergedLogs = { ...cloudLogs };
+  for(const [day, slots] of Object.entries(incomingLogs)){
+    if(!mergedLogs[day]){
+      mergedLogs[day] = slots;
+    } else {
+      mergedLogs[day] = { ...mergedLogs[day], ...slots };
+    }
+  }
+
+  // Merge quick checks by unique timestamp
+  const incomingQuick = Array.isArray(b.quickChecks) ? b.quickChecks : [];
+  const quickMap = new Map();
+  cloudQuick.forEach(q => { if(q && q.timestamp) quickMap.set(q.timestamp, q); });
+  incomingQuick.forEach(q => { if(q && q.timestamp) quickMap.set(q.timestamp, q); });
+  const mergedQuick = Array.from(quickMap.values()).sort((a,b)=> (a.timestamp||"").localeCompare(b.timestamp||""));
+
+  const start = (b.start && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(b.start)) ? b.start : (existing?.start_time || "07:00");
+  const end = (b.end && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(b.end)) ? b.end : (existing?.end_time || "21:00");
+  const nowIso = new Date().toISOString();
+
+  await env.DB.prepare(`INSERT INTO user_data(user_id, logs, quick_checks, start_time, end_time, updated_at)
+    VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
+    logs=excluded.logs, quick_checks=excluded.quick_checks,
+    start_time=excluded.start_time, end_time=excluded.end_time,
+    updated_at=excluded.updated_at`)
+    .bind(auth.user_id, JSON.stringify(mergedLogs), JSON.stringify(mergedQuick), start, end, nowIso).run();
+
+  if(b.endpoint){
+    try {
+      await env.DB.prepare("UPDATE subscriptions SET user_id=? WHERE endpoint=?").bind(auth.user_id, b.endpoint).run();
+    } catch(e) {}
+  }
+
+  return json({
+    ok: true,
+    data: {
+      logs: mergedLogs,
+      quickChecks: mergedQuick,
+      start,
+      end,
+      updatedAt: nowIso
+    }
+  }, 200, request);
+}
+
 async function ensureDiagnostics(DB){
   await DB.prepare("CREATE TABLE IF NOT EXISTS scheduler_debug (id INTEGER PRIMARY KEY CHECK (id=1), details TEXT, updated_at TEXT)").run();
   await DB.prepare("INSERT OR IGNORE INTO scheduler_debug(id,details) VALUES(1,'{}')").run();
@@ -189,6 +386,30 @@ async function ensureDiagnostics(DB){
     sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(subscription_id,scheduled_at)
   )`).run();
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  await DB.prepare(`CREATE TABLE IF NOT EXISTS user_data (
+    user_id TEXT PRIMARY KEY,
+    logs TEXT NOT NULL DEFAULT '{}',
+    quick_checks TEXT NOT NULL DEFAULT '[]',
+    start_time TEXT NOT NULL DEFAULT '07:00',
+    end_time TEXT NOT NULL DEFAULT '21:00',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  try{await DB.prepare("ALTER TABLE subscriptions ADD COLUMN user_id TEXT").run();}catch(e){}
 }
 async function scheduler(env, controller){
   await ensureDiagnostics(env.DB);
@@ -285,11 +506,11 @@ async function scheduler(env, controller){
 }
 export default {
   async fetch(request,env){
-    if(request.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
+    if(request.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders(request)});
     const path=new URL(request.url).pathname;
     try{
+      await ensureDiagnostics(env.DB);
       if(request.method==="GET"&&path==="/status"){
-        await ensureDiagnostics(env.DB);
         const now=localNow();
         const {results=[]}=await env.DB.prepare(`SELECT p.start_minute,p.end_minute,p.enabled,
           (SELECT COUNT(*) FROM sent_notifications n WHERE n.subscription_id=s.id) AS sent_count,
@@ -297,6 +518,7 @@ export default {
           FROM subscriptions s JOIN preferences p ON p.subscription_id=s.id`).all();
         const heartbeat=await env.DB.prepare("SELECT last_run,last_cron,runs,last_error FROM scheduler_heartbeat WHERE id=1").first();
         const schedulerDebug=await env.DB.prepare("SELECT details,updated_at FROM scheduler_debug WHERE id=1").first();
+        const userCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM users").first().then(r=>r?.count||0).catch(()=>0);
         return json({
           ok:true,
           timezone:TZ,
@@ -308,18 +530,25 @@ export default {
           },
           heartbeat,
           schedulerDebug,
+          totalUsers:userCount,
           subscriptions:results
-        });
+        },200,request);
       }
       if(request.method==="GET"&&path==="/health"){
         const r=await env.DB.prepare("SELECT COUNT(*) AS count FROM subscriptions").first();
-        return json({ok:true,service:"Hydrate API",database:"connected",subscriptions:r.count});
+        return json({ok:true,service:"Hydrate API",database:"connected",subscriptions:r.count},200,request);
       }
       if(request.method==="POST"&&path==="/test-push")return await testPush(request,env);
       if(request.method==="POST"&&path==="/subscribe")return await subscribe(request,env);
       if(request.method==="POST"&&path==="/preferences")return await preferences(request,env);
-      return json({error:"Not found"},404);
-    }catch(e){console.error(e);return json({error:e.message||"Server error"},500);}
+      if(request.method==="POST"&&path==="/auth/signup")return await handleSignup(request,env);
+      if(request.method==="POST"&&path==="/auth/login")return await handleLogin(request,env);
+      if(request.method==="GET"&&path==="/auth/me")return await handleMe(request,env);
+      if(request.method==="POST"&&path==="/auth/logout")return await handleLogout(request,env);
+      if(request.method==="GET"&&path==="/user/data")return await handleGetUserData(request,env);
+      if(request.method==="POST"&&path==="/user/sync")return await handleSyncUserData(request,env);
+      return json({error:"Not found"},404,request);
+    }catch(e){console.error(e);return json({error:e.message||"Server error"},500,request);}
   },
   async scheduled(controller,env,ctx){
     ctx.waitUntil(scheduler(env,controller).catch(async error=>{
