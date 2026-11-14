@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>578822047072-1jus1fdkbr828emqqn2thr8di35ffgbh.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.578822047072-1jus1fdkbr828emqqn2thr8di35ffgbh</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDwRe8DNR2D_K7zc6zHMXSf9F52NqGz-Tc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>578822047072</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.goutham.hydrate</string>
+	<key>PROJECT_ID</key>
+	<string>studio-5007150230-180ab</string>
+	<key>STORAGE_BUCKET</key>
+	<string>studio-5007150230-180ab.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:578822047072:ios:bdf8fb60ea6be8192c0a05</string>
+</dict>
+</plist>

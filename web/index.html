@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eaf6ff" id="metaThemeColor">
+  <meta name="description" content="Hydrate — Mindful drinking accountability with zero friction. Cross-platform sync between iPhone and Web.">
+  <title>Hydrate — Mindful Drinking, Zero Friction</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./apple-touch-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+  <script>
+    try {
+      const savedTheme = localStorage.getItem("hydrate-theme") || "system";
+      if (savedTheme === "dark" || (savedTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.dataset.theme = "dark";
+        const metaColor = document.getElementById("metaThemeColor");
+        if (metaColor) metaColor.content = "#09131d";
+      } else {
+        document.documentElement.dataset.theme = "light";
+      }
+    } catch(e) {}
+  </script>
+</head>
+<body>
+<main class="shell">
+  <!-- Global Top Navigation -->
+  <header class="nav">
+    <a class="logo" href="./">
+      <span class="drop"><img src="./apple-touch-icon.png" alt="Hydrate logo"></span>
+      <span class="logo-text">hydrate<span class="dot">.</span></span>
+    </a>
+    <div class="nav-actions">
+      <!-- Download iOS App CTA -->
+      <button class="nav-download-btn" id="navDownloadBtn" aria-label="Download iOS App">
+        <svg class="apple-icon" viewBox="0 0 170 170" width="16" height="16" fill="currentColor">
+          <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.67-7.81-11.96-14.34-6.6-10.08-11.78-21.43-15.53-34.05-3.75-12.63-5.63-24.36-5.63-35.19 0-14.52 3.59-26.69 10.77-36.52 7.18-9.84 16.32-14.88 27.42-15.14 5.26 0 11.09 1.49 17.48 4.48 6.38 2.99 10.45 4.54 12.21 4.64 1.34 0 5.68-1.63 13.02-4.91 7.34-3.27 13.57-4.66 18.69-4.17 14.17.98 25.13 6.13 32.88 15.45-12.51 7.62-18.61 18.06-18.3 31.33.29 10.45 4.27 19.16 11.94 26.13 7.67 6.97 16.79 10.96 27.36 11.96-2.17 6.42-4.78 13.03-7.83 19.83zM119.22 33.11c0-7.39 2.66-14.41 7.98-21.05 5.32-6.64 11.89-10.75 19.7-12.33.22 1.31.33 2.5.33 3.59 0 7.39-2.77 14.46-8.31 21.2-5.54 6.74-12.18 10.66-19.92 11.75-.11-1.09-.22-2.18-.22-3.16z"/>
+        </svg>
+        <span>Get iOS App</span>
+      </button>
+
+      <!-- Auth Pill -->
+      <button class="auth-pill" id="authPill" aria-label="Sign in or view account">
+        <span class="auth-pill-avatar" id="authPillAvatar">👤</span>
+        <span class="auth-pill-text" id="authPillText">Sign in</span>
+        <span class="auth-sync-dot" id="authSyncDot" title="Live Cloud Sync Active" hidden></span>
+      </button>
+
+      <!-- Theme Switcher -->
+      <button class="theme-quick-btn" id="quickThemeBtn" aria-label="Switch Theme" title="Switch Theme">
+        <span id="quickThemeIcon">☀️</span>
+      </button>
+
+      <!-- Mobile Menu Trigger -->
+      <button class="menu-trigger" id="menuTrigger" aria-label="Open Menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ======================================================== -->
+  <!-- 1. PUBLIC LANDING VIEW (Shown when user is logged out)  -->
+  <!-- ======================================================== -->
+  <div id="landingView" class="landing-view">
+    <!-- Hero Section -->
+    <section class="landing-hero">
+      <div class="landing-badge">
+        <span class="badge-dot"></span> Cross-Platform Sync: iOS & Web
+      </div>
+      <h1 class="landing-title">
+        Mindful hydration.<br>
+        <span class="gradient-text">Zero friction.</span>
+      </h1>
+      <p class="landing-subtitle">
+        Never wonder if you drank enough water. Discrete accountability check-ins that keep you healthy, energized, and on track — without tedious volume logging.
+      </p>
+
+      <!-- Interactive Landing Demo Ring -->
+      <div class="landing-demo-card">
+        <div class="demo-ring-wrapper">
+          <svg class="demo-ring-svg" viewBox="0 0 160 160">
+            <circle class="demo-ring-bg" cx="80" cy="80" r="70"></circle>
+            <circle class="demo-ring-progress" id="demoRingProgress" cx="80" cy="80" r="70"></circle>
+          </svg>
+          <div class="demo-ring-content">
+            <span class="demo-ring-count" id="demoRingCount">5 <small>/ 8</small></span>
+            <span class="demo-ring-label" id="demoRingLabel">62% of daily goal</span>
+          </div>
+        </div>
+        <div class="demo-ring-action">
+          <button class="demo-btn" id="demoCheckInBtn">
+            <span>💧 Try a Check-in</span>
+          </button>
+          <p class="demo-note" id="demoRingNote">Click to test the goal proximity engine!</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="landing-cta-group">
+        <button class="btn-primary" id="landingSignInBtn">
+          <span>Sign In to Sync</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button class="btn-secondary" id="landingDownloadBtn">
+          <svg class="apple-icon" viewBox="0 0 170 170" width="16" height="16" fill="currentColor">
+            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.67-7.81-11.96-14.34-6.6-10.08-11.78-21.43-15.53-34.05-3.75-12.63-5.63-24.36-5.63-35.19 0-14.52 3.59-26.69 10.77-36.52 7.18-9.84 16.32-14.88 27.42-15.14 5.26 0 11.09 1.49 17.48 4.48 6.38 2.99 10.45 4.54 12.21 4.64 1.34 0 5.68-1.63 13.02-4.91 7.34-3.27 13.57-4.66 18.69-4.17 14.17.98 25.13 6.13 32.88 15.45-12.51 7.62-18.61 18.06-18.3 31.33.29 10.45 4.27 19.16 11.94 26.13 7.67 6.97 16.79 10.96 27.36 11.96-2.17 6.42-4.78 13.03-7.83 19.83zM119.22 33.11c0-7.39 2.66-14.41 7.98-21.05 5.32-6.64 11.89-10.75 19.7-12.33.22 1.31.33 2.5.33 3.59 0 7.39-2.77 14.46-8.31 21.2-5.54 6.74-12.18 10.66-19.92 11.75-.11-1.09-.22-2.18-.22-3.16z"/>
+          </svg>
+          <span>Download Native iOS App</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Value Propositions Grid -->
+    <section class="landing-features">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Real-Time Cloud Sync</h3>
+        <p>Log a water drink from your iPhone lock screen, and watch the dashboard on your desktop update instantly via Cloud Firestore.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Goal Proximity Accountability</h3>
+        <p>No tedious mL or ounce measurements. Focus strictly on hitting your target hydration moments throughout your active day.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔔</div>
+        <h3>Actionable Notifications</h3>
+        <p>iOS notifications feature one-tap <code>[Yes, I drank]</code> and <code>[Not yet]</code> action buttons right on your lock screen.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">✨</div>
+        <h3>Personalized Reminders</h3>
+        <p>Your reminders call you by your custom nickname with encouraging check-in moments throughout your daily routine.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 2. AUTHENTICATED DASHBOARD (Live Hydration Tracker)     -->
+  <!-- ======================================================== -->
+  <div id="dashboardView" class="dashboard-view" hidden>
+    <!-- Welcome Header -->
+    <section class="hero-auth">
+      <div class="hero-auth-row">
+        <div>
+          <p class="kicker" id="todayDate">Today</p>
+          <h1 class="welcome-heading">Hey <span id="userNickname">Friend</span> <span class="wave-emoji">👋</span></h1>
+        </div>
+        <div class="sync-status-badge" id="syncStatusBadge">
+          <span class="sync-dot live"></span>
+          <span class="sync-text">Live Sync</span>
+        </div>
+      </div>
+      <p class="proximity-banner" id="proximityBanner">
+        0 of 8 check-ins — Let's start hydrating! 💧
+      </p>
+    </section>
+
+    <!-- Main Score & Fluid Goal Card -->
+    <section class="card tracker-card">
+      <div class="tracker-visual">
+        <div class="main-ring-wrapper">
+          <svg class="main-ring-svg" viewBox="0 0 200 200">
+            <circle class="main-ring-bg" cx="100" cy="100" r="88"></circle>
+            <circle class="main-ring-progress" id="mainRingProgress" cx="100" cy="100" r="88"></circle>
+          </svg>
+          <div class="main-ring-inner">
+            <span class="main-score-text" id="mainScoreText">0 <small id="mainGoalText">/ 8</small></span>
+            <span class="main-percent-text" id="mainPercentText">0%</span>
+            <span class="main-status-label" id="mainStatusLabel">Daily Goal</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Button -->
+      <div class="action-box">
+        <button class="log-water-btn" id="logWaterBtn">
+          <span class="btn-ripple"></span>
+          <span class="btn-icon">💧</span>
+          <span class="btn-label">I Drank Water</span>
+        </button>
+        <div class="action-sub-row">
+          <button class="btn-undo" id="undoBtn" hidden>Undo last log</button>
+          <span class="window-caption" id="windowCaption">Routine: 7:00 AM – 9:00 PM</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Today's Activity Log -->
+    <section class="card activity-card">
+      <div class="card-head">
+        <div>
+          <p class="kicker">TODAY'S ACTIVITY</p>
+          <h2>Logged Moments</h2>
+        </div>
+        <span class="badge-count" id="loggedMomentsCount">0 logged</span>
+      </div>
+      <div class="moments-list" id="momentsList">
+        <p class="empty-moments">No check-ins logged yet today. Take a sip and tap above!</p>
+      </div>
+    </section>
+
+    <!-- Monthly Progress & Streak -->
+    <section class="card calendar-card">
+      <div class="card-head">
+        <div>
+          <p class="kicker">MONTHLY HISTORY</p>
+          <h2 id="calendarMonthTitle">This Month</h2>
+        </div>
+        <div class="streak-badge">
+          <span class="streak-flame">🔥</span>
+          <span class="streak-count" id="streakCount">0</span>
+          <span class="streak-label">day streak</span>
+        </div>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </section>
+
+    <!-- App Info Footer -->
+    <footer class="app-footer">
+      <span>Hydrate • Bidirectional Cloud Sync</span>
+      <button class="btn-link" id="footerDownloadBtn">Download Native iOS App</button>
+    </footer>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 3. THREE-STEP ONBOARDING MODAL                           -->
+  <!-- ======================================================== -->
+  <dialog id="onboardingModal" class="app-dialog onboarding-dialog">
+    <div class="onboarding-container">
+      <!-- Step Indicator -->
+      <div class="steps-progress">
+        <span class="step-dot active" id="dotStep1"></span>
+        <span class="step-line" id="lineStep1"></span>
+        <span class="step-dot" id="dotStep2"></span>
+        <span class="step-line" id="lineStep2"></span>
+        <span class="step-dot" id="dotStep3"></span>
+      </div>
+
+      <!-- Step 1: Nickname -->
+      <div class="step-page" id="onboardStep1">
+        <div class="step-icon">👋</div>
+        <h2>What should we call you?</h2>
+        <p class="step-desc">We'll use your nickname for personalized daily check-in reminders.</p>
+        <div class="input-group">
+          <label for="onboardNickname">Your Name or Nickname</label>
+          <input type="text" id="onboardNickname" placeholder="e.g. Alex" maxlength="30" autocomplete="given-name">
+        </div>
+        <button class="btn-primary step-btn" id="toStep2Btn">Continue to Daily Goal →</button>
+      </div>
+
+      <!-- Step 2: Daily Target Goal -->
+      <div class="step-page" id="onboardStep2" hidden>
+        <div class="step-icon">🎯</div>
+        <h2>What is your daily target?</h2>
+        <p class="step-desc">How many hydration check-ins would you like to achieve each day? (No volume tracking!).</p>
+        <div class="goal-selector">
+          <button class="goal-chip" data-goal="6">6 times</button>
+          <button class="goal-chip active" data-goal="8">8 times (Recommended)</button>
+          <button class="goal-chip" data-goal="10">10 times</button>
+          <button class="goal-chip" data-goal="12">12 times</button>
+        </div>
+        <div class="custom-goal-row">
+          <span>Or choose custom:</span>
+          <div class="stepper">
+            <button class="step-math-btn" id="decGoalBtn">-</button>
+            <strong id="customGoalValue">8</strong>
+            <button class="step-math-btn" id="incGoalBtn">+</button>
+          </div>
+        </div>
+        <div class="step-nav-row">
+          <button class="btn-ghost" id="backToStep1Btn">← Back</button>
+          <button class="btn-primary step-btn" id="toStep3Btn">Continue to Routine →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Daily Routine Window -->
+      <div class="step-page" id="onboardStep3" hidden>
+        <div class="step-icon">⏰</div>
+        <h2>Your Daily Routine</h2>
+        <p class="step-desc">When does your day start and end? We'll space your reminders evenly during these hours.</p>
+        <div class="time-range-group">
+          <div class="time-field">
+            <label for="routineStart">Day Starts (Wake up)</label>
+            <input type="time" id="routineStart" value="07:00">
+          </div>
+          <div class="time-field">
+            <label for="routineEnd">Day Ends (Wind down)</label>
+            <input type="time" id="routineEnd" value="21:00">
+          </div>
+        </div>
+        <div class="step-nav-row">
+          <button class="btn-ghost" id="backToStep2Btn">← Back</button>
+          <button class="btn-primary step-btn" id="finishOnboardingBtn">Finish & Launch Tracker 🚀</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ======================================================== -->
+  <!-- 4. AUTH MODAL (Google & Apple One-Tap Sign In)           -->
+  <!-- ======================================================== -->
+  <dialog id="authModal" class="app-dialog auth-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <h2>Sign In to Hydrate</h2>
+        <button class="close-x" id="closeAuthModal" aria-label="Close dialog">✕</button>
+      </div>
+      <p class="dialog-subtitle">
+        One tap to sync your hydration progress seamlessly between your iPhone and web browser. Zero passwords, zero email verification.
+      </p>
+
+      <div class="auth-btn-stack">
+        <!-- Sign in with Google -->
+        <button class="btn-social google-btn" id="googleSignInBtn">
+          <svg class="social-icon" viewBox="0 0 24 24" width="20" height="20">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.67v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.16z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.94H1.26v3.15C3.25 21.37 7.32 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.28 14.26c-.25-.72-.38-1.49-.38-2.26s.13-1.54.38-2.26V6.59H1.26C.46 8.19 0 9.99 0 12s.46 3.81 1.26 5.41l4.02-3.15z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.32 0 3.25 2.63 1.26 6.59l4.02 3.15c.95-2.84 3.6-4.99 6.72-4.99z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+
+        <!-- Sign in with Apple -->
+        <button class="btn-social apple-btn" id="appleSignInBtn">
+          <svg class="social-icon apple-icon" viewBox="0 0 170 170" width="20" height="20" fill="currentColor">
+            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.04-7.67-7.81-11.96-14.34-6.6-10.08-11.78-21.43-15.53-34.05-3.75-12.63-5.63-24.36-5.63-35.19 0-14.52 3.59-26.69 10.77-36.52 7.18-9.84 16.32-14.88 27.42-15.14 5.26 0 11.09 1.49 17.48 4.48 6.38 2.99 10.45 4.54 12.21 4.64 1.34 0 5.68-1.63 13.02-4.91 7.34-3.27 13.57-4.66 18.69-4.17 14.17.98 25.13 6.13 32.88 15.45-12.51 7.62-18.61 18.06-18.3 31.33.29 10.45 4.27 19.16 11.94 26.13 7.67 6.97 16.79 10.96 27.36 11.96-2.17 6.42-4.78 13.03-7.83 19.83zM119.22 33.11c0-7.39 2.66-14.41 7.98-21.05 5.32-6.64 11.89-10.75 19.7-12.33.22 1.31.33 2.5.33 3.59 0 7.39-2.77 14.46-8.31 21.2-5.54 6.74-12.18 10.66-19.92 11.75-.11-1.09-.22-2.18-.22-3.16z"/>
+          </svg>
+          <span>Continue with Apple</span>
+        </button>
+      </div>
+
+      <div id="authErrorMsg" class="auth-error" hidden></div>
+      <p class="dialog-foot">By continuing, you agree to store your hydration check-ins securely in Cloud Firestore.</p>
+    </div>
+  </dialog>
+
+  <!-- ======================================================== -->
+  <!-- 5. DOWNLOAD iOS APP MODAL                                -->
+  <!-- ======================================================== -->
+  <dialog id="downloadModal" class="app-dialog download-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <div class="app-icon-badge"><img src="./apple-touch-icon.png" alt="Hydrate App Icon"></div>
+        <h2>Install Hydrate on iPhone</h2>
+        <button class="close-x" id="closeDownloadModal" aria-label="Close dialog">✕</button>
+      </div>
+      <p class="dialog-subtitle">
+        Your native SwiftUI iOS app is built and located right in your workspace:
+      </p>
+
+      <div class="code-box">
+        <code>/Users/goutham/Desktop/Vibe Code/P/Hydrate/ios/Hydrate.xcodeproj</code>
+      </div>
+
+      <div class="install-steps">
+        <div class="step-item">
+          <span class="step-num">1</span>
+          <div>
+            <strong>Open in Xcode</strong>
+            <p>Double-click <code>Hydrate.xcodeproj</code> to open the native project.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">2</span>
+          <div>
+            <strong>Connect your iPhone</strong>
+            <p>Plug in your iPhone with a USB cable or connect via Wi-Fi.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">3</span>
+          <div>
+            <strong>Click Run (⌘R)</strong>
+            <p>Select your iPhone as destination and press <strong>Cmd + R</strong>. The app installs immediately with interactive lock-screen notifications enabled!</p>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary full-width" id="doneDownloadModal">Got it, ready to install</button>
+    </div>
+  </dialog>
+
+  <!-- ======================================================== -->
+  <!-- 6. USER PROFILE & SETTINGS MODAL                         -->
+  <!-- ======================================================== -->
+  <dialog id="settingsModal" class="app-dialog settings-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <h2>Hydration Settings</h2>
+        <button class="close-x" id="closeSettingsModal" aria-label="Close dialog">✕</button>
+      </div>
+
+      <div class="settings-body">
+        <div class="setting-row">
+          <label for="editNickname">Nickname</label>
+          <input type="text" id="editNickname" maxlength="30">
+        </div>
+
+        <div class="setting-row">
+          <label for="editGoal">Daily Target Check-ins</label>
+          <input type="number" id="editGoal" min="1" max="24">
+        </div>
+
+        <div class="setting-row-times">
+          <div>
+            <label for="editStart">Day Starts</label>
+            <input type="time" id="editStart">
+          </div>
+          <div>
+            <label for="editEnd">Day Ends</label>
+            <input type="time" id="editEnd">
+          </div>
+        </div>
+
+        <div class="account-actions">
+          <button class="btn-primary full-width" id="saveSettingsBtn">Save Changes</button>
+          <button class="btn-danger full-width" id="signOutBtn">Sign Out</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Toast Notification element -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
